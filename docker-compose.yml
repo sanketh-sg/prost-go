@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # ==================== Infrastructure ====================
+  postgres:
+    image: postgres:15-alpine
+    container_name: prost-postgres
+    environment:
+      POSTGRES_USER: prost_admin
+      POSTGRES_PASSWORD: prost_password
+      POSTGRES_DB: prost
+      POSTGRES_INITDB_ARGS: "-c shared_buffers=256MB -c max_connections=200"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prost_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: prost-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+  # ==================== API Gateway ====================
+  gateway:
+    build: ./gateway
+    container_name: prost-gateway
+    ports:
+      - "80:80"
+    depends_on:
+      - catalog
+      - cart
+      - orders
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+  # ==================== Frontend ====================
+  frontend:
+    build: ./frontend
+    container_name: prost-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gateway
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+  # ==================== Backend Services ====================
+  catalog:
+    build: ./services/catalog
+    container_name: prost-catalog
+    environment:
+      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+  cart:
+    build: ./services/cart
+    container_name: prost-cart
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/prost
+      REDIS_URL: redis://redis:6379/1
+      CATALOG_SERVICE_URL: http://catalog:8080
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+  orders:
+    build: ./services/orders
+    container_name: prost-orders
+    environment:
+      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost
+      REDIS_URL: redis://redis:6379/2
+      CART_SERVICE_URL: http://cart:8081
+      CATALOG_SERVICE_URL: http://catalog:8080
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  prost-network:
+    driver: bridge
