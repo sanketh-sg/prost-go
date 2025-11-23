@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   # ==================== Infrastructure ====================
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: prost-postgres
     environment:
       POSTGRES_USER: prost_admin
@@ -14,17 +12,22 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U prost_admin"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - ./infra/migrations:/migrations:ro  # Mount migrations folder
+    
+  migrate:
+    image: migrate/migrate
+    volumes:
+      - ./infra/migrations:/migrations:ro
+    command: -path /migrations -database postgresql://prost_admin:prost_password@postgres:5432/prost?sslmode=disable up
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
     networks:
       - prost-network
-    restart: unless-stopped
+    restart: "no"  # Don't restart, run once
 
   redis:
-    image: redis:7-alpine
+    image: redis:latest
     container_name: prost-redis
     command: redis-server --appendonly yes
     ports:
@@ -40,16 +43,44 @@ services:
       - prost-network
     restart: unless-stopped
 
+  rabbitmq:
+    image: rabbitmq:latest
+    container_name: prost-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"      # AMQP protocol
+      - "15672:15672"    # Management UI (http://localhost:15672)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - prost-network
+    restart: unless-stopped
+
   # ==================== API Gateway ====================
   gateway:
     build: ./gateway
     container_name: prost-gateway
     ports:
       - "80:80"
+    environment:
+      USERS_SERVICE_URL: http://users:8083
+      PRODUCTS_SERVICE_URL: http://catalog:8080
+      CART_SERVICE_URL: http://cart:8081
+      ORDERS_SERVICE_URL: http://orders:8082
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
+      - users
       - catalog
       - cart
       - orders
+      - rabbitmq
     networks:
       - prost-network
     restart: unless-stopped
@@ -60,6 +91,8 @@ services:
     container_name: prost-frontend
     ports:
       - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost/graphql
     depends_on:
       - gateway
     networks:
@@ -67,18 +100,45 @@ services:
     restart: unless-stopped
 
   # ==================== Backend Services ====================
-  catalog:
-    build: ./services/catalog
-    container_name: prost-catalog
+  users:
+    build: ./services/users
+    container_name: prost-users
     environment:
-      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost
+      SERVICE_NAME: users
+      PORT: 8083
+      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost?sslmode=disable
+      DB_SCHEMA: users
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      JWT_SECRET: your-secret-key-change-in-production
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - prost-network
+    restart: unless-stopped
+
+  catalog:
+    build: ./services/products
+    container_name: prost-products
+    environment:
+      SERVICE_NAME: products
+      PORT: 8080
+      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost?sslmode=disable
+      DB_SCHEMA: catalog
       REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - prost-network
@@ -88,15 +148,21 @@ services:
     build: ./services/cart
     container_name: prost-cart
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/prost
+      SERVICE_NAME: cart
+      PORT: 8081
+      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost?sslmode=disable
+      DB_SCHEMA: cart
       REDIS_URL: redis://redis:6379/1
-      CATALOG_SERVICE_URL: http://catalog:8080
+      PRODUCTS_SERVICE_URL: http://catalog:8080
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     ports:
       - "8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - prost-network
@@ -106,16 +172,22 @@ services:
     build: ./services/orders
     container_name: prost-orders
     environment:
-      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost
+      SERVICE_NAME: orders
+      PORT: 8082
+      DATABASE_URL: postgresql://prost_admin:prost_password@postgres:5432/prost?sslmode=disable
+      DB_SCHEMA: orders
       REDIS_URL: redis://redis:6379/2
       CART_SERVICE_URL: http://cart:8081
-      CATALOG_SERVICE_URL: http://catalog:8080
+      PRODUCTS_SERVICE_URL: http://catalog:8080
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     ports:
       - "8082:8082"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - prost-network
@@ -125,6 +197,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  rabbitmq_data:
     driver: local
 
 networks:
