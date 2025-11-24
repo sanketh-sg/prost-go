@@ -280,18 +280,3 @@ Protected Profile Update:
 ✅ **Event-driven communication** (prepared via messaging layer)  
 ✅ **REST API design** (Gin framework, standardized responses)  
 ✅ **Data isolation** (each service owns its schema)  
-
----
-
-### Ready for Phase 4?
-
-**Products Service will add:**
-- Event publishing (ProductCreated, StockReserved, etc.)
-- Inventory management with reservations
-- Saga participation (reserve stock when orders arrive)
-- CRUD endpoints for products
-- Stock tracking across services
-
-Same Gin architecture, but now with async event flow.
-
-**Should I provide Phase 4: Products Service?** 🚀
