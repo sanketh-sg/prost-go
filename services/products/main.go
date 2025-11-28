@@ -145,7 +145,7 @@ func main()  {
 
     // Start server in goroutine
     log.Printf("\n✓ Products service listening on :%s", port)
-    log.Println("\n=== Service Ready ===\n")
+    log.Println("\n=== Service Ready ===")
 
     _ = subscriber // Keep reference to prevent GC
 

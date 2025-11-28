@@ -1,0 +1,20 @@
+gateway:
+  build: ./gateway
+  container_name: prost-gateway
+  ports:
+    - "80:80"
+  environment:
+    PORT: 80
+    USERS_SERVICE_URL: http://users:8083
+    PRODUCTS_SERVICE_URL: http://catalog:8080
+    CART_SERVICE_URL: http://cart:8081
+    ORDERS_SERVICE_URL: http://orders:8082
+    JWT_SECRET: your-secret-key-change-in-production
+  depends_on:
+    - users
+    - catalog
+    - cart
+    - orders
+  networks:
+    - prost-network
+  restart: unless-stopped

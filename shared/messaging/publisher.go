@@ -96,3 +96,18 @@ func (p *Publisher) PublishOrderEvent(ctx context.Context, event interface{}) er
 
     return p.PublishEvent(ctx, event, routingKey)
 }
+
+func (p *Publisher) PublishCartEvent(ctx context.Context, event interface{}) error {
+	var routingKey string
+
+	switch event.(type) {
+	case events.CartCheckoutInitiatedEvent:
+		routingKey = "cart.initiated"
+	case events.CartClearedEvent:
+		routingKey = "cart.cleared"
+	default:
+        return fmt.Errorf("unknown order event type: %T", event)
+    }
+
+	return p.PublishEvent(ctx, event, routingKey)
+}

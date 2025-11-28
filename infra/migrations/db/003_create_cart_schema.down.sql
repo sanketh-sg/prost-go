@@ -1,0 +1,19 @@
+DROP INDEX IF EXISTS cart.idx_idempotency_records_event_id;
+DROP INDEX IF EXISTS cart.idx_saga_states_expires_at;
+DROP INDEX IF EXISTS cart.idx_saga_states_status;
+DROP INDEX IF EXISTS cart.idx_saga_states_correlation_id;
+DROP INDEX IF EXISTS cart.idx_inventory_locks_expires_at;
+DROP INDEX IF EXISTS cart.idx_inventory_locks_status;
+DROP INDEX IF EXISTS cart.idx_inventory_locks_product_id;
+DROP INDEX IF EXISTS cart.idx_inventory_locks_cart_id;
+DROP INDEX IF EXISTS cart.idx_cart_items_product_id;
+DROP INDEX IF EXISTS cart.idx_cart_items_cart_id;
+DROP INDEX IF EXISTS cart.idx_carts_created_at;
+DROP INDEX IF EXISTS cart.idx_carts_status;
+DROP INDEX IF EXISTS cart.idx_carts_user_id;
+
+DROP TABLE IF EXISTS cart.idempotency_records;
+DROP TABLE IF EXISTS cart.saga_states;
+DROP TABLE IF EXISTS cart.inventory_locks;
+DROP TABLE IF EXISTS cart.cart_items;
+DROP TABLE IF EXISTS cart.carts;

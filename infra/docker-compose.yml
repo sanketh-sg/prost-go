@@ -1,0 +1,17 @@
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: prost-postgres
+    environment:
+      POSTGRES_USER: prost_admin
+      POSTGRES_PASSWORD: prost_password
+      POSTGRES_DB: prost
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./migrations:/migrations:ro
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:
+    driver: local

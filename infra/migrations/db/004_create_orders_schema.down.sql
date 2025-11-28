@@ -1,0 +1,22 @@
+DROP INDEX IF EXISTS orders.idx_idempotency_records_event_id;
+DROP INDEX IF EXISTS orders.idx_compensation_log_status;
+DROP INDEX IF EXISTS orders.idx_compensation_log_correlation_id;
+DROP INDEX IF EXISTS orders.idx_compensation_log_order_id;
+DROP INDEX IF EXISTS orders.idx_inventory_reservations_status;
+DROP INDEX IF EXISTS orders.idx_inventory_reservations_order_id;
+DROP INDEX IF EXISTS orders.idx_saga_states_expires_at;
+DROP INDEX IF EXISTS orders.idx_saga_states_status;
+DROP INDEX IF EXISTS orders.idx_saga_states_correlation_id;
+DROP INDEX IF EXISTS orders.idx_order_items_product_id;
+DROP INDEX IF EXISTS orders.idx_order_items_order_id;
+DROP INDEX IF EXISTS orders.idx_orders_created_at;
+DROP INDEX IF EXISTS orders.idx_orders_saga_correlation_id;
+DROP INDEX IF EXISTS orders.idx_orders_status;
+DROP INDEX IF EXISTS orders.idx_orders_user_id;
+
+DROP TABLE IF EXISTS orders.idempotency_records;
+DROP TABLE IF EXISTS orders.compensation_log;
+DROP TABLE IF EXISTS orders.inventory_reservations;
+DROP TABLE IF EXISTS orders.saga_states;
+DROP TABLE IF EXISTS orders.order_items;
+DROP TABLE IF EXISTS orders.orders;
