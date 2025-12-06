@@ -11,15 +11,21 @@ import (
 
     "github.com/gin-gonic/gin"
     "github.com/joho/godotenv"
+    // "github.com/sanketh-sg/prost/gateway"
 )
+
+// ContextKey is a custom type for context keys
+type ContextKey string
+
+const UserContextKey ContextKey = "user"
 
 // Config holds gateway configuration
 type Config struct {
     Port            string
     UsersServiceURL string
-    ProductsServiceURL string
-    CartServiceURL string
-    OrdersServiceURL string
+    // ProductsServiceURL string
+    // CartServiceURL string
+    // OrdersServiceURL string
     JWTSecret string
 }
 
@@ -56,16 +62,16 @@ func (g *Gateway) setupRoutes() {
 
     // Create service clients
     userService := NewUserService(g.config.UsersServiceURL, g.httpClient)
-    productService := NewProductService(g.config.ProductsServiceURL, g.httpClient)
-    cartService := NewCartService(g.config.CartServiceURL, g.httpClient)
-    orderService := NewOrderService(g.config.OrdersServiceURL, g.httpClient)
+    // productService := NewProductService(g.config.ProductsServiceURL, g.httpClient)
+    // cartService := NewCartService(g.config.CartServiceURL, g.httpClient)
+    // orderService := NewOrderService(g.config.OrdersServiceURL, g.httpClient)
 
     // Create resolver context
     resolverCtx := &ResolverContext{
         UserService:    userService,
-        ProductService: productService,
-        CartService:    cartService,
-        OrderService:   orderService,
+        // ProductService: productService,
+        // CartService:    cartService,
+        // OrderService:   orderService,
         TokenValidator: g.tokenValidator,
     }
 
@@ -75,16 +81,24 @@ func (g *Gateway) setupRoutes() {
     // GraphQL endpoint
     g.router.POST("/graphql", authMiddleware(g.tokenValidator), func(c *gin.Context) {
         var query GraphQLQuery
-        if err := c.BindJSON(&query); err != nil {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-            return
-        }
 
+        // Parse the JSON request body
+        if err := c.BindJSON(&query); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+        return
+        }
+        
         // Create context with user claims
         ctx := c.Request.Context()
         if val, ok := c.Get("user"); ok {
-            ctx = context.WithValue(ctx, "user", val)
+            ctx = context.WithValue(ctx, UserContextKey, val)
         }
+
+        // Create context with user claims
+        // ctx := c.Request.Context()
+        // if val, ok := c.Get("user"); ok {
+        //     ctx = context.WithValue(ctx, "user", val)
+        // }
 
         // Execute query
         result := ExecuteQuery(query.Query, query.Variables, schema, ctx)
@@ -146,19 +160,24 @@ func (g *Gateway) Run() error {
 // loadConfig loads configuration from environment
 func loadConfig() *Config {
     // Load .env file if present
-    _ = godotenv.Load()
+    err := godotenv.Load()
+
+    if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 
     port := os.Getenv("PORT")
     if port == "" {
         port = "80"
+        log.Println("Using default port for gateway")
     }
 
     return &Config{
         Port: port,
         UsersServiceURL: os.Getenv("USERS_SERVICE_URL"),
-        ProductsServiceURL: os.Getenv("PRODUCTS_SERVICE_URL"),
-        CartServiceURL: os.Getenv("CART_SERVICE_URL"),
-        OrdersServiceURL: os.Getenv("ORDERS_SERVICE_URL"),
+        // ProductsServiceURL: os.Getenv("PRODUCTS_SERVICE_URL"),
+        // CartServiceURL: os.Getenv("CART_SERVICE_URL"),
+        // OrdersServiceURL: os.Getenv("ORDERS_SERVICE_URL"),
         JWTSecret: os.Getenv("JWT_SECRET"),
     }
 }
@@ -206,10 +225,13 @@ func main() {
     config := loadConfig()
 
     // Validate required config
-    if config.UsersServiceURL == "" || config.ProductsServiceURL == "" ||
-        config.CartServiceURL == "" || config.OrdersServiceURL == "" {
-        log.Fatal("❌ Missing required service URLs in environment")
+    if config.UsersServiceURL == "" {
+        log.Fatal("Missing required service URLs in environment")
     }
+    // if config.UsersServiceURL == "" || config.ProductsServiceURL == "" ||
+    //     config.CartServiceURL == "" || config.OrdersServiceURL == "" {
+    //     log.Fatal("❌ Missing required service URLs in environment")
+    // }
 
     gateway := NewGateway(config)
 

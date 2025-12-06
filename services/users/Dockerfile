@@ -3,7 +3,7 @@ FROM golang:1.25.4-alpine AS builder
 WORKDIR /app
 
 # Copy root go.mod and shared module
-COPY go.mod .
+COPY services/users/go.mod .
 COPY shared/ ./shared/
 
 # Copy service files
@@ -26,3 +26,6 @@ COPY --from=builder /app/services/users/users .
 EXPOSE 8083
 
 CMD ["./users"]
+
+# Build from folder /Prost Docker does not allow copying from outside the build context
+# Hence use paths relative to prost folder

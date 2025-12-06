@@ -13,19 +13,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/migrations:/migrations:ro  # Mount migrations folder
-    
-  migrate:
-    image: migrate/migrate
-    volumes:
-      - ./infra/migrations:/migrations:ro
-    command: -path /migrations -database postgresql://prost_admin:prost_password@postgres:5432/prost?sslmode=disable up
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
-    networks:
-      - prost-network
-    restart: "no"  # Don't restart, run once
-
   redis:
     image: redis:latest
     container_name: prost-redis

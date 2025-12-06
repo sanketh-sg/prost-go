@@ -1,31 +1,37 @@
-
 package main
 
 import (
-    "context"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/sanketh-sg/prost/services/users/handlers"
-    "github.com/sanketh-sg/prost/services/users/middleware"
-    "github.com/sanketh-sg/prost/services/users/repository"
-    "github.com/sanketh-sg/prost/shared/db"
-    "github.com/sanketh-sg/prost/shared/messaging"
+	"github.com/joho/godotenv"
+	"github.com/gin-gonic/gin"
+	"github.com/sanketh-sg/prost/services/users/handlers"
+	"github.com/sanketh-sg/prost/services/users/middleware"
+	"github.com/sanketh-sg/prost/services/users/repository"
+	"github.com/sanketh-sg/prost/shared/db"
 )
 
 func main() {
+    
+    err := godotenv.Load(".env")
+	
+    if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
+    
 	// Load environment variables
     serviceName := os.Getenv("SERVICE_NAME")
     if serviceName == "" {
         serviceName = "users"
     }
 
-	port := os.Getenv("PORT")
+	port := os.Getenv("PORT_USER")
 	if port == "" {
 		port = "8083"
 	}
@@ -38,17 +44,14 @@ func main() {
     dbSchema := os.Getenv("DB_SCHEMA")
     if dbSchema == "" {
         dbSchema = "users"
+        log.Println("DATABASE_SCHEMA not set using default 'users'")
+        
     }
 
 	jwtSecret := os.Getenv("JWT_SECRET")
     if jwtSecret == "" {
-        log.Println("⚠️  JWT_SECRET not set, using default (INSECURE)")
+        log.Println("JWT_SECRET not set, using default (INSECURE)")
         jwtSecret = "default-secret-change-in-production"
-    }
-
-	rabbitmqURL := os.Getenv("RABBITMQ_URL")
-    if rabbitmqURL == "" {
-        rabbitmqURL = "amqp://guest:guest@localhost:5672/"
     }
 
 
@@ -59,16 +62,18 @@ func main() {
     log.Printf("Service: %s", serviceName)
     log.Printf("Port: %s", port)
     log.Printf("Schema: %s", dbSchema)
+    log.Printf("Database URL: %s", dbURL)
 
 
 	// Database connection
     log.Println("\nConnecting to PostgreSQL...")
+    var host, envport, user, password, dbname string = os.Getenv("HOST"), os.Getenv("PORT_DB"), os.Getenv("USER"), os.Getenv("PASSWORD"), os.Getenv("DBNAME")
     dbConn, err := db.NewDBConnection(db.Config{
-        Host:     "postgres",
-        Port:     "5432",
-        User:     "prost_admin",
-        Password: "prost_password",
-        DBName:   "prost",
+        Host:     host,
+        Port:     envport,
+        User:     user,
+        Password: password,
+        DBName:   dbname,
         Schema:   dbSchema,
     })
     if err != nil {
@@ -77,38 +82,21 @@ func main() {
     defer dbConn.DBConnClose()
     log.Println("✓ Database connected")
 
-	//RabbitMQ Connection
-	log.Println("\nConnecting to RabbitMQ...")
-	rmqConn, err := messaging.NewRmqConnection(rabbitmqURL)
-	if err != nil {
-		log.Fatalf("RabbitMQ connection failed: %v", err)
-	}
-	defer rmqConn.Close()
-
-	//Setup RabbitMQ topology
-	topology := messaging.GetProstTopology()
-	if err := rmqConn.SetupRabbitMQ(topology); err != nil {
-		log.Fatalf("RabbitMQ setup failed: %v", err)
-	}
-	log.Println("RabbitMQ connected and topology ready...;)")
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(dbConn)
-	idempotencyStore := db.NewIdempotencyStore(dbConn)
 
-	// Initialize event publisher
-    publisher := messaging.NewPublisher(rmqConn, "")
 
 	//Initialize Handlers
-	userHandler := handlers.NewUserHandler(userRepo, idempotencyStore, publisher, jwtSecret)
+	userHandler := handlers.NewUserHandler(userRepo, jwtSecret)
 
 	//Create Gin router
 	router := gin.New()
 	
 	//Add Middleware
-    router.Use(gin.Logger())
-    router.Use(gin.Recovery())
-    router.Use(middleware.CORSMiddleware())
+    router.Use(gin.Logger()) // Logs each request concurrently
+    router.Use(gin.Recovery())  // Catches panics independently
+    router.Use(middleware.CORSMiddleware()) // Takes care of CORS headers
 
 	// Public routes
     router.POST("/register", userHandler.Register)

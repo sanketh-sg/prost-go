@@ -7,6 +7,7 @@ services:
       POSTGRES_USER: prost_admin
       POSTGRES_PASSWORD: prost_password
       POSTGRES_DB: prost
+      POSTGRES_INITDB_ARGS: "-c shared_buffers=256MB -c max_connections=100"
     ports:
       - "5432:5432"
     volumes:

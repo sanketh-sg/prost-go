@@ -1,7 +1,6 @@
 package handlers
 
 import (
-    "context"
     "log"
     "net/http"
     "time"
@@ -10,29 +9,22 @@ import (
     "github.com/sanketh-sg/prost/services/users/auth"
     "github.com/sanketh-sg/prost/services/users/models"
     "github.com/sanketh-sg/prost/services/users/repository"
-    "github.com/sanketh-sg/prost/shared/db"
-    "github.com/sanketh-sg/prost/shared/messaging"
+
 )
 
 // UserHandler handles user-related HTTP requests
 type UserHandler struct {
     userRepo         *repository.UserRepository
-    idempotencyStore *db.IdempotencyStore
-    eventPublisher   *messaging.Publisher
     jwtManager       *auth.JWTManager
 }
 
 // NewUserHandler creates a new user handler
 func NewUserHandler(
     userRepo *repository.UserRepository,
-    idempotencyStore *db.IdempotencyStore,
-    eventPublisher *messaging.Publisher,
     jwtSecret string,
 ) *UserHandler {
     return &UserHandler{
         userRepo:         userRepo,
-        idempotencyStore: idempotencyStore,
-        eventPublisher:   eventPublisher,
         jwtManager:       auth.NewJWTManager(jwtSecret),
     }
 }
@@ -48,7 +40,8 @@ func NewUserHandler(
 // @Failure 400 {object} models.ErrorResponse
 // @Router /register [post]
 func (uh *UserHandler) Register(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background() // No timeout 
+     ctx := c.Request.Context()  // Inherits HTTP server timeout
 
     var req models.CreateUserRequest
     if err := c.ShouldBindJSON(&req); err != nil {
@@ -153,7 +146,8 @@ func (uh *UserHandler) Register(c *gin.Context) {
 // @Failure 401 {object} models.ErrorResponse
 // @Router /login [post]
 func (uh *UserHandler) Login(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background()
+     ctx := c.Request.Context()  // Inherits HTTP server timeout
 
     var req models.LoginRequest
     if err := c.ShouldBindJSON(&req); err != nil {
@@ -233,7 +227,8 @@ func (uh *UserHandler) Login(c *gin.Context) {
 // @Failure 404 {object} models.ErrorResponse
 // @Router /profile/{id} [get]
 func (uh *UserHandler) GetProfile(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background()
+     ctx := c.Request.Context()  // Inherits HTTP server timeout
 
     userID := c.Param("id")
     if userID == "" {
@@ -278,7 +273,8 @@ func (uh *UserHandler) GetProfile(c *gin.Context) {
 // @Failure 401 {object} models.ErrorResponse
 // @Router /profile/{id} [patch]
 func (uh *UserHandler) UpdateProfile(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background()
+     ctx := c.Request.Context()  // Inherits HTTP server timeout
 
     userID := c.Param("id")
     if userID == "" {
