@@ -13,6 +13,24 @@ services:
     volumes:
       - ./migrations:/migrations:ro
       - postgres_data:/var/lib/postgresql/data
+  rabbitmq:
+    image: rabbitmq:latest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 volumes:
   postgres_data:
+    driver: local #  Uses the default local driver (stores data on your machine's disk)
+  rabbitmq_data:
     driver: local
