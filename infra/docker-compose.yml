@@ -25,10 +25,11 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 15s  # Give RabbitMQ 15 seconds to start
 volumes:
   postgres_data:
     driver: local #  Uses the default local driver (stores data on your machine's disk)
