@@ -18,6 +18,8 @@ func NewRmqConnection(connURL string)(*Connection, error){
 	var conn *amqp.Connection
 	var err error
 
+	log.Println(connURL)
+
 	for i := 0; i < 5; i++ {
 		conn, err = amqp.Dial(connURL)
 

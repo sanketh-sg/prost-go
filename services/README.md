@@ -57,3 +57,12 @@ and if anything fails at any layer, we return a consistent error response.
 
 This architecture allows us to scale, test easily, and maintain 
 clean separation of concerns.
+
+
+Idempotency Concept and how it applies to my project
+
+In distributed systems, messages can be delivered twice or more due to network failures. Idempotency prevents duplicate processing. So, doing the same operation multiple times produces the same result as doing it once.
+
+UNIQUE(event_id, service_name) ensures the same event from the same service can only be recorded once.
+
+Each service has its own idempotency table, as they have seperate schema we keep them seprate

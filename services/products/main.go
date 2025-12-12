@@ -1,46 +1,59 @@
 package main
 
 import (
-    "context"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+    "fmt"
 
-    "github.com/gin-gonic/gin"
-    "github.com/sanketh-sg/prost/services/products/handlers"
-    "github.com/sanketh-sg/prost/services/products/repository"
-    "github.com/sanketh-sg/prost/services/products/middleware"
-    "github.com/sanketh-sg/prost/shared/db"
-    "github.com/sanketh-sg/prost/shared/messaging"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"github.com/sanketh-sg/prost/services/products/handlers"
+	"github.com/sanketh-sg/prost/services/products/middleware"
+	"github.com/sanketh-sg/prost/services/products/repository"
+	"github.com/sanketh-sg/prost/shared/db"
+	"github.com/sanketh-sg/prost/shared/messaging"
 )
 
 func main()  {
 	//Load env variables
+
+    err := godotenv.Load(".env")
+
+    if err != nil {
+        log.Fatalf("Error loading .env file: %v", err)
+    }
+
 	serviceName := os.Getenv("SERVICE_NAME")
 	if serviceName == ""{
+        log.Println("Using default service name...")
 		serviceName = "products"
 	}
 
-	port := os.Getenv("PORT")
+	port := os.Getenv("PORT_PRODUCT")
 	if port == "" {
+        log.Println("Using default port...")
 		port = "8080"
 	}
 
 	dbSchema := os.Getenv("DB_SCHEMA")
 	if dbSchema == "" {
+        log.Println("Using default schema...")
 		dbSchema = "catalog"
 	}
 
 	rabbitmqURL := os.Getenv("RABBITMQ_URL")
     if rabbitmqURL == "" {
+        log.Panicln("Using default rabbitmqURL")
         rabbitmqURL = "amqp://guest:guest@localhost:5672/"
     }
 
 	// Set Gin Mode
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode) // Disables debug logging, colorised output, better and faster
 
 	log.Println("=== Products Service Starting ===")
     log.Printf("Service: %s", serviceName)
@@ -49,19 +62,20 @@ func main()  {
 
 	// DB Connection
 	log.Println("\nConnecting to PostgreSQL...")
+    var host, envport, user, password, dbname string = os.Getenv("HOST"), os.Getenv("PORT_DB"), os.Getenv("USER"), os.Getenv("PASSWORD"), os.Getenv("DBNAME")
 	dbConn, err := db.NewDBConnection(db.Config{
-		Host:     "postgres",
-        Port:     "5432",
-        User:     "prost_admin",
-        Password: "prost_password",
-        DBName:   "prost",
+		Host:     host,
+        Port:     envport,
+        User:     user,
+        Password: password,
+        DBName:   dbname,
         Schema:   dbSchema,
 	})
 	if err != nil {
 		log.Fatalf("Database connection failed: %v", err)
 	}
 	defer dbConn.DBConnClose()
-	log.Println("Database connected")
+	log.Println("Product-->Database connected")
 
 
 	//RabbitMQ connection
@@ -137,14 +151,34 @@ func main()  {
     }
 	 // Start event subscriber in goroutine
     log.Println("\nStarting event subscriber...")
+    
     go func() {
-        // TODO: Implement event subscriber for inventory updates
-        // For now, just log that it would listen
-        log.Println("✓ Event subscriber ready (TODO: implement handlers)")
+        log.Println("\nStarting event subscriber for inventory updates...")
+        
+        // Define the handler for inventory update events
+        handler := func(message []byte) error {
+            log.Printf("Processing inventory event: %s", string(message))
+            
+            // Parse the event
+            event, err := subscriber.ParseEvent(message)
+            if err != nil {
+                return fmt.Errorf("failed to parse event: %w", err)
+            }
+            
+            // Handle the event based on type
+            // For now, just log it
+            log.Printf("Event received: %v", event)
+            return nil
+        }
+        
+        // Subscribe with retry logic
+        if err := subscriber.SubscribeWithRetry(handler, 3); err != nil {
+            log.Fatalf("Subscriber error: %v", err)
+        }
     }()
 
     // Start server in goroutine
-    log.Printf("\n✓ Products service listening on :%s", port)
+    log.Printf("\n Products service listening on :%s", port)
     log.Println("\n=== Service Ready ===")
 
     _ = subscriber // Keep reference to prevent GC

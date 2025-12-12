@@ -6,4 +6,5 @@ e2e
 **/.env
 .DS_Store
 *.log
-.dockerignorepnpm -
+.dockerignorepnpm 
+prost-overview.md

@@ -56,7 +56,7 @@ func main() {
 
 
 	// Set Gin mode
-    gin.SetMode(gin.ReleaseMode)
+    gin.SetMode(gin.ReleaseMode)  // Disables debug logging, colorised output, better and faster
 
 	log.Println("=== Users Service Starting ===")
     log.Printf("Service: %s", serviceName)
