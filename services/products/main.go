@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+    "encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -15,9 +16,53 @@ import (
 	"github.com/sanketh-sg/prost/services/products/handlers"
 	"github.com/sanketh-sg/prost/services/products/middleware"
 	"github.com/sanketh-sg/prost/services/products/repository"
+    "github.com/sanketh-sg/prost/services/products/models"
 	"github.com/sanketh-sg/prost/shared/db"
+    "github.com/sanketh-sg/prost/shared/events"
 	"github.com/sanketh-sg/prost/shared/messaging"
 )
+
+
+// handleStockReserved processes StockReservedEvent from RabbitMQ
+// Why: When Cart or Order service reserves inventory, we record it
+// This creates an inventory_reservations record linking the product to the order
+func handleStockReserved(ctx context.Context, event *events.StockReservedEvent, inventoryRepo *repository.InventoryReservationRepository) error {
+    log.Printf("✓ RabbitMQ: Processing StockReservedEvent: ProductID=%d, Quantity=%d, ReservationID=%s", 
+        event.ProductID, event.Quantity, event.ReservationID)
+    
+    reservation := &models.InventoryReservation{
+        ProductID:     event.ProductID,
+        Quantity:      event.Quantity,
+        OrderID:       event.OrderID,
+        ReservationID: event.ReservationID,
+        Status:        "reserved",
+    }
+    
+    if err := inventoryRepo.CreateReservation(ctx, reservation); err != nil {
+        log.Printf("❌ Failed to create reservation: %v", err)
+        return fmt.Errorf("failed to create reservation: %w", err)
+    }
+    
+    log.Printf("✓ Reservation created from RabbitMQ event: %s", event.ReservationID)
+    return nil
+}
+
+// handleStockReleased processes StockReleasedEvent from RabbitMQ (compensation)
+// Why: When an order fails or is cancelled, we release the reserved inventory
+// This marks the reservation as "released" so it's no longer counted as reserved
+func handleStockReleased(ctx context.Context, event *events.StockReleasedEvent, inventoryRepo *repository.InventoryReservationRepository) error {
+    log.Printf("✓ RabbitMQ: Processing StockReleasedEvent: ProductID=%d, Quantity=%d, Reason=%s", 
+        event.ProductID, event.Quantity, event.Reason)
+    
+    if err := inventoryRepo.ReleaseReservation(ctx, event.ReservationID); err != nil {
+        log.Printf("❌ Failed to release reservation: %v", err)
+        return fmt.Errorf("failed to release reservation: %w", err)
+    }
+    
+    log.Printf("✓ Reservation released from RabbitMQ event: %s (Reason: %s)", event.ReservationID, event.Reason)
+    return nil
+}
+
 
 func main()  {
 	//Load env variables
@@ -154,21 +199,36 @@ func main()  {
     
     go func() {
         log.Println("\nStarting event subscriber for inventory updates...")
-        
+        log.Println("Listening for inventory update events (product.*)...")
         // Define the handler for inventory update events
         handler := func(message []byte) error {
             log.Printf("Processing inventory event: %s", string(message))
             
-            // Parse the event
-            event, err := subscriber.ParseEvent(message)
-            if err != nil {
-                return fmt.Errorf("failed to parse event: %w", err)
+            var stockReserved events.StockReservedEvent
+            if err := json.Unmarshal(message, &stockReserved); err == nil && stockReserved.EventType == "stock.reserved" {
+                return handleStockReserved(context.Background(), &stockReserved, inventoryRepo)
             }
-            
-            // Handle the event based on type
-            // For now, just log it
-            log.Printf("Event received: %v", event)
+
+            // Try to parse as StockReleasedEvent
+            var stockReleased events.StockReleasedEvent
+            if err := json.Unmarshal(message, &stockReleased); err == nil && stockReleased.EventType == "stock.released" {
+                return handleStockReleased(context.Background(), &stockReleased, inventoryRepo)
+            }
+
+            // Unknown event type - log and skip
+            log.Printf("⚠️  Unknown event type received: %s", string(message))
             return nil
+
+            // // Parse the event
+            // event, err := subscriber.ParseEvent(message)
+            // if err != nil {
+            //     return fmt.Errorf("failed to parse event: %w", err)
+            // }
+            
+            // // Handle the event based on type
+            // // For now, just log it
+            // log.Printf("Event received: %v", event)
+            // return nil
         }
         
         // Subscribe with retry logic

@@ -114,25 +114,6 @@ func NewProductService(baseURL string, httpClient *HTTPClient) *ProductService {
     }
 }
 
-// GetProducts calls products service list endpoint
-func (ps *ProductService) GetProducts(ctx context.Context, categoryID *int64) ([]map[string]interface{}, error) {
-    url := fmt.Sprintf("%s/products", ps.baseURL)
-    if categoryID != nil {
-        url = fmt.Sprintf("%s?category_id=%d", url, *categoryID)
-    }
-
-    respBody, err := ps.httpClient.GET(ctx, url, nil)
-    if err != nil {
-        return nil, err
-    }
-
-    var products []map[string]interface{}
-    if err := json.Unmarshal(respBody, &products); err != nil {
-        return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-    }
-
-    return products, nil
-}
 
 // GetProduct calls products service get endpoint
 func (ps *ProductService) GetProduct(ctx context.Context, id int64) (map[string]interface{}, error) {
@@ -149,6 +130,45 @@ func (ps *ProductService) GetProduct(ctx context.Context, id int64) (map[string]
     return product, nil
 }
 
+
+
+// GetProducts calls products service list endpoint
+func (ps *ProductService) GetProducts(ctx context.Context, categoryID *int64) ([]map[string]interface{}, error) {
+    url := fmt.Sprintf("%s/products", ps.baseURL)
+    if categoryID != nil {
+        url = fmt.Sprintf("%s?category_id=%d", url, *categoryID)
+    }
+
+    respBody, err := ps.httpClient.GET(ctx, url, nil)
+    if err != nil {
+        return nil, err
+    }
+
+    var response map[string]interface{}
+    if err := json.Unmarshal(respBody, &response); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    // Extract products array from wrapper
+    productsData, ok := response["products"].([]interface{})
+    if !ok {
+        // Handle case where products is nil or not an array
+        if response["products"] == nil {
+            return []map[string]interface{}{}, nil
+        }
+        return nil, fmt.Errorf("invalid products response format")
+    }
+
+    var products []map[string]interface{}
+    for _, p := range productsData {
+        if product, ok := p.(map[string]interface{}); ok {
+            products = append(products, product)
+        }
+    }
+
+    return products, nil
+}
+
 // GetCategories calls products service categories endpoint
 func (ps *ProductService) GetCategories(ctx context.Context) ([]map[string]interface{}, error) {
     respBody, err := ps.httpClient.GET(ctx, fmt.Sprintf("%s/categories", ps.baseURL), nil)
@@ -156,14 +176,30 @@ func (ps *ProductService) GetCategories(ctx context.Context) ([]map[string]inter
         return nil, err
     }
 
-    var categories []map[string]interface{}
-    if err := json.Unmarshal(respBody, &categories); err != nil {
+    var response map[string]interface{}
+    if err := json.Unmarshal(respBody, &response); err != nil {
         return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    // Extract categories array from wrapper
+    categoriesData, ok := response["categories"].([]interface{})
+    if !ok {
+        // Handle case where categories is nil or not an array
+        if response["categories"] == nil {
+            return []map[string]interface{}{}, nil
+        }
+        return nil, fmt.Errorf("invalid categories response format")
+    }
+
+    var categories []map[string]interface{}
+    for _, c := range categoriesData {
+        if category, ok := c.(map[string]interface{}); ok {
+            categories = append(categories, category)
+        }
     }
 
     return categories, nil
 }
-
 // ============ CART SERVICE ============
 
 // CartService handles cart-related operations

@@ -224,4 +224,67 @@ With idempotency: All 600 safely ignored
 - **Schema Utilities** = Home inspection (verify house is safe before moving in)
 - **Idempotency Tracking** = Receipt system (don't charge for same item twice)
 
-Without any one of them, your system works until it doesn't — usually at 3 AM in production! 🚀
+docker exec -it prost-postgres psql -U prost_admin -d prost
+
+
+PostgreSQL Server
+├── Database: prost
+│   ├── Schema: catalog
+│   │   ├── products id | name | description | price | category_id | sku | stock_quantity | image_url | created_at | updated_at | deleted_at 
+│   │               ----+------+-------------+-------+-------------+-----+----------------+-----------+------------+------------+------------
+│   │   ├── categories   id | name | description | created_at | updated_at | deleted_at 
+│   │                   ----+------+-------------+------------+------------+------------
+│   │   └── inventory_reservations  id | product_id | quantity | order_id | reservation_id | status | created_at | expires_at | released_at
+│   │                              ----+------------+----------+----------+----------------+--------+------------+------------+-------------
+│   ├── Schema: users
+│   │   └── users  id | email | username | password_hash | created_at | updated_at | deleted_at 
+│   │             ----+-------+----------+---------------+------------+------------+------------
+│   ├── Schema: cart
+│   │   ├── carts   id | user_id | status | total | created_at | updated_at | abandoned_at 
+│   │              ----+---------+--------+-------+------------+------------+--------------
+│   │   └── cart_items   id | cart_id | product_id | quantity | price | created_at | updated_at 
+│   │                   ----+---------+------------+----------+-------+------------+------------
+│   └── Schema: orders
+│   │   ├── orders  id | user_id | cart_id | total | status | saga_correlation_id | created_at | updated_at | shipped_at | delivered_at | cancelled_at 
+│   │              ----+---------+---------+-------+--------+---------------------+------------+------------+------------+--------------+--------------
+│   │   └── order_items  id | order_id | product_id | quantity | price | created_at 
+│   │                   ----+----------+------------+----------+-------+------------
+├── Database: analytics
+│   └── Schema: public
+│       └── reports
+
+```sql
+-- List all schemas
+\dn
+
+-- List tables in catalog schema
+\dt catalog.*
+
+-- List tables in users schema
+\dt users.*
+
+-- List tables in cart schema
+\dt cart.*
+
+-- List tables in orders schema
+\dt orders.*
+
+-- View structure of products table
+\d catalog.products
+
+-- View structure of categories table
+\d catalog.categories
+
+-- View all products
+SELECT * FROM catalog.products;
+
+-- View all categories
+SELECT * FROM catalog.categories;
+
+-- Count products and categories
+SELECT COUNT(*) FROM catalog.products;
+SELECT COUNT(*) FROM catalog.categories;
+
+-- View sample data with formatting
+SELECT id, name, price, stock_quantity FROM catalog.products LIMIT 10;
+```
