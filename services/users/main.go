@@ -67,13 +67,12 @@ func main() {
 
 	// Database connection
     log.Println("\nConnecting to PostgreSQL...")
-    var host, envport, user, password, dbname string = os.Getenv("HOST"), os.Getenv("PORT_DB"), os.Getenv("USER"), os.Getenv("PASSWORD"), os.Getenv("DBNAME")
     dbConn, err := db.NewDBConnection(db.Config{
-        Host:     host,
-        Port:     envport,
-        User:     user,
-        Password: password,
-        DBName:   dbname,
+        Host:     os.Getenv("HOST"),
+        Port:     os.Getenv("PORT_DB"),
+        User:     os.Getenv("USER"),
+        Password: os.Getenv("PASSWORD"),
+        DBName:   os.Getenv("DBNAME"),
         Schema:   dbSchema,
     })
     if err != nil {

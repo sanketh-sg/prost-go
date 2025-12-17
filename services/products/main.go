@@ -9,59 +9,16 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-    "fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/sanketh-sg/prost/services/products/handlers"
 	"github.com/sanketh-sg/prost/services/products/middleware"
 	"github.com/sanketh-sg/prost/services/products/repository"
-    "github.com/sanketh-sg/prost/services/products/models"
 	"github.com/sanketh-sg/prost/shared/db"
     "github.com/sanketh-sg/prost/shared/events"
 	"github.com/sanketh-sg/prost/shared/messaging"
 )
-
-
-// handleStockReserved processes StockReservedEvent from RabbitMQ
-// Why: When Cart or Order service reserves inventory, we record it
-// This creates an inventory_reservations record linking the product to the order
-func handleStockReserved(ctx context.Context, event *events.StockReservedEvent, inventoryRepo *repository.InventoryReservationRepository) error {
-    log.Printf("✓ RabbitMQ: Processing StockReservedEvent: ProductID=%d, Quantity=%d, ReservationID=%s", 
-        event.ProductID, event.Quantity, event.ReservationID)
-    
-    reservation := &models.InventoryReservation{
-        ProductID:     event.ProductID,
-        Quantity:      event.Quantity,
-        OrderID:       event.OrderID,
-        ReservationID: event.ReservationID,
-        Status:        "reserved",
-    }
-    
-    if err := inventoryRepo.CreateReservation(ctx, reservation); err != nil {
-        log.Printf("❌ Failed to create reservation: %v", err)
-        return fmt.Errorf("failed to create reservation: %w", err)
-    }
-    
-    log.Printf("✓ Reservation created from RabbitMQ event: %s", event.ReservationID)
-    return nil
-}
-
-// handleStockReleased processes StockReleasedEvent from RabbitMQ (compensation)
-// Why: When an order fails or is cancelled, we release the reserved inventory
-// This marks the reservation as "released" so it's no longer counted as reserved
-func handleStockReleased(ctx context.Context, event *events.StockReleasedEvent, inventoryRepo *repository.InventoryReservationRepository) error {
-    log.Printf("✓ RabbitMQ: Processing StockReleasedEvent: ProductID=%d, Quantity=%d, Reason=%s", 
-        event.ProductID, event.Quantity, event.Reason)
-    
-    if err := inventoryRepo.ReleaseReservation(ctx, event.ReservationID); err != nil {
-        log.Printf("❌ Failed to release reservation: %v", err)
-        return fmt.Errorf("failed to release reservation: %w", err)
-    }
-    
-    log.Printf("✓ Reservation released from RabbitMQ event: %s (Reason: %s)", event.ReservationID, event.Reason)
-    return nil
-}
 
 
 func main()  {
@@ -107,15 +64,14 @@ func main()  {
 
 	// DB Connection
 	log.Println("\nConnecting to PostgreSQL...")
-    var host, envport, user, password, dbname string = os.Getenv("HOST"), os.Getenv("PORT_DB"), os.Getenv("USER"), os.Getenv("PASSWORD"), os.Getenv("DBNAME")
-	dbConn, err := db.NewDBConnection(db.Config{
-		Host:     host,
-        Port:     envport,
-        User:     user,
-        Password: password,
-        DBName:   dbname,
+    dbConn, err := db.NewDBConnection(db.Config{
+        Host:     os.Getenv("HOST"),
+        Port:     os.Getenv("PORT_DB"),
+        User:     os.Getenv("USER"),
+        Password: os.Getenv("PASSWORD"),
+        DBName:   os.Getenv("DBNAME"),
         Schema:   dbSchema,
-	})
+    })
 	if err != nil {
 		log.Fatalf("Database connection failed: %v", err)
 	}
@@ -206,13 +162,13 @@ func main()  {
             
             var stockReserved events.StockReservedEvent
             if err := json.Unmarshal(message, &stockReserved); err == nil && stockReserved.EventType == "stock.reserved" {
-                return handleStockReserved(context.Background(), &stockReserved, inventoryRepo)
+                return handlers.HandleStockReserved(context.Background(), &stockReserved, inventoryRepo)
             }
 
             // Try to parse as StockReleasedEvent
             var stockReleased events.StockReleasedEvent
             if err := json.Unmarshal(message, &stockReleased); err == nil && stockReleased.EventType == "stock.released" {
-                return handleStockReleased(context.Background(), &stockReleased, inventoryRepo)
+                return handlers.HandleStockReleased(context.Background(), &stockReleased, inventoryRepo)
             }
 
             // Unknown event type - log and skip

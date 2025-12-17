@@ -1,3 +1,24 @@
+# Core Architecture
+
+## Microservices:
+User Service: Authentication and user management (JWT-based)
+Products Service: Product catalog, categories, and inventory management
+Cart Service: Shopping cart operations and item management
+Orders Service: Order creation and saga-based distributed transactions
+
+## Communication & Data:
+GraphQL Gateway: Aggregates all microservices into a single API endpoint
+RabbitMQ: Asynchronous event-driven communication between services (stock reserved, cart checkout initiated, orders confirmed)
+PostgreSQL: Database with 4 separate schemas (one per service) following database-per-service pattern
+Redis: Optional caching layer
+
+## Key Architectural Patterns
+Saga Pattern: Distributed transactions across Cart → Orders → Products services with compensation logic for failures
+Event-Driven Architecture: Services communicate via RabbitMQ topic exchanges with routing keys (product.*, cart.*, order.*)
+Idempotency: Prevents duplicate event processing through idempotency keys and records
+Database-Per-Service: Each microservice owns its schema, ensuring loose coupling
+
+
 Plan: Step-by-Step Implementation Roadmap
 Current State: Gateway deleted, 4 empty service directories, infrastructure ready (PostgreSQL, Redis, RabbitMQ), frontend Vue scaffolded.
 
