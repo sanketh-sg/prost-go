@@ -63,3 +63,10 @@ Orders Service receives StockReservedEvent
 Order Complete 
 
 ```
+
+Orders Service (SagaOrchestrator)
+├─ INITIATES the saga (creates order)
+├─ PUBLISHES events to trigger other services
+├─ TRACKS saga state (pending → confirmed → failed)
+├─ MAKES DECISIONS (what to do next)
+└─ LOGS COMPENSATION (what to undo if failure)

@@ -24,7 +24,7 @@ type Config struct {
     Port            string
     UsersServiceURL string
     ProductsServiceURL string
-    // CartServiceURL string
+    CartServiceURL string
     OrdersServiceURL string
     JWTSecret string
 }
@@ -63,14 +63,14 @@ func (g *Gateway) setupRoutes() {
     // Create service clients
     userService := NewUserService(g.config.UsersServiceURL, g.httpClient)
     productService := NewProductService(g.config.ProductsServiceURL, g.httpClient)
-    // cartService := NewCartService(g.config.CartServiceURL, g.httpClient)
+    cartService := NewCartService(g.config.CartServiceURL, g.httpClient)
     orderService := NewOrderService(g.config.OrdersServiceURL, g.httpClient)
 
     // Create resolver context
     resolverCtx := &ResolverContext{
         UserService:    userService,
         ProductService: productService,
-        // CartService:    cartService,
+        CartService:    cartService,
         OrderService:   orderService,
         TokenValidator: g.tokenValidator,
     }
@@ -177,7 +177,7 @@ func loadConfig() *Config {
         UsersServiceURL: os.Getenv("USERS_SERVICE_URL"),
         ProductsServiceURL: os.Getenv("PRODUCTS_SERVICE_URL"),
         OrdersServiceURL: os.Getenv("ORDERS_SERVICE_URL"),
-        // CartServiceURL: os.Getenv("CART_SERVICE_URL"),
+        CartServiceURL: os.Getenv("CART_SERVICE_URL"),
 
         JWTSecret: os.Getenv("JWT_SECRET"),
     }
@@ -226,13 +226,10 @@ func main() {
     config := loadConfig()
 
     // Validate required config
-    if config.UsersServiceURL == "" {
-        log.Fatal("Missing required service URLs in environment")
+    if config.UsersServiceURL == "" || config.ProductsServiceURL == "" ||
+        config.CartServiceURL == "" || config.OrdersServiceURL == "" {
+        log.Fatal("❌ Missing required service URLs in environment")
     }
-    // if config.UsersServiceURL == "" || config.ProductsServiceURL == "" ||
-    //     config.CartServiceURL == "" || config.OrdersServiceURL == "" {
-    //     log.Fatal("❌ Missing required service URLs in environment")
-    // }
 
     gateway := NewGateway(config)
 

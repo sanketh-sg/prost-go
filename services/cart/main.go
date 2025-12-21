@@ -1,47 +1,58 @@
 package main
 
 import (
-    "context"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/sanketh-sg/prost/services/cart/handlers"
-    "github.com/sanketh-sg/prost/services/cart/repository"
-    "github.com/sanketh-sg/prost/services/cart/middleware"
-    "github.com/sanketh-sg/prost/services/cart/subscribers"
-    "github.com/sanketh-sg/prost/shared/db"
-    "github.com/sanketh-sg/prost/shared/messaging"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"github.com/sanketh-sg/prost/services/cart/handlers"
+	"github.com/sanketh-sg/prost/services/cart/middleware"
+	"github.com/sanketh-sg/prost/services/cart/repository"
+	"github.com/sanketh-sg/prost/services/cart/subscribers"
+	"github.com/sanketh-sg/prost/shared/db"
+	"github.com/sanketh-sg/prost/shared/messaging"
 )
 
 func main() {
     // Load environment variables
+    err := godotenv.Load(".env")
+
+    if err != nil {
+        log.Fatalln("Failed to load env file...")
+    }
+
     serviceName := os.Getenv("SERVICE_NAME")
     if serviceName == "" {
+        log.Println("Using default Service Name...")
         serviceName = "cart"
     }
 
     port := os.Getenv("PORT")
     if port == "" {
+        log.Println("Using default port...")
         port = "8081"
     }
 
     dbSchema := os.Getenv("DB_SCHEMA")
     if dbSchema == "" {
+        log.Println("Using default dbSchema...")
         dbSchema = "cart"
     }
 
     rabbitmqURL := os.Getenv("RABBITMQ_URL")
     if rabbitmqURL == "" {
+        log.Panic("Using defalut RabbitMQ URL...")
         rabbitmqURL = "amqp://guest:guest@localhost:5672/"
     }
 
     // Set Gin mode
-    gin.SetMode(gin.ReleaseMode)
+    // gin.SetMode(gin.ReleaseMode)
 
     log.Println("=== Cart Service Starting ===")
     log.Printf("Service: %s", serviceName)
@@ -51,11 +62,11 @@ func main() {
     // Database connection
     log.Println("\nConnecting to PostgreSQL...")
     dbConn, err := db.NewDBConnection(db.Config{
-        Host:     "postgres",
-        Port:     "5432",
-        User:     "prost_admin",
-        Password: "prost_password",
-        DBName:   "prost",
+        Host:     os.Getenv("HOST"),
+        Port:     os.Getenv("PORT_DB"),
+        User:     os.Getenv("USER"),
+        Password: os.Getenv("PASSWORD"),
+        DBName:   os.Getenv("DBNAME"),
         Schema:   dbSchema,
     })
     if err != nil {
