@@ -1,10 +1,10 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "net/url"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/url"
 )
 
 // ============ USER SERVICE ============
@@ -200,6 +200,154 @@ func (ps *ProductService) GetCategories(ctx context.Context) ([]map[string]inter
 
     return categories, nil
 }
+
+func (ps *ProductService) CreateProduct(ctx context.Context, name, description string, price float64, sku string, stockQuantity, categoryId *int) (map[string]interface{}, error) {
+    reqBody :=  map[string]interface{}{
+        "name": name,
+        "price": price,
+    }
+    if description != "" {
+        reqBody["description"] = description
+    }
+    if sku != "" {
+        reqBody["sku"] = sku
+    }
+    if stockQuantity != nil {
+        reqBody["stock_quantity"] = *stockQuantity
+    }
+    if categoryId != nil {
+        reqBody["category_id"] = *categoryId
+    }
+
+    respBody, err := ps.httpClient.POST(ctx, fmt.Sprintf("%s/products", ps.baseURL), nil, reqBody)
+    if err != nil {
+        return nil, err
+    }
+
+    var product map[string]interface{}
+    if err := json.Unmarshal(respBody, &product); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return product, nil
+}
+
+// UpdateProduct calls products service update endpoint
+func (ps *ProductService) UpdateProduct(ctx context.Context, id int64, name, description *string, price *float64, stockQuantity, categoryID *int) (map[string]interface{}, error) {
+    reqBody := map[string]interface{}{}
+    if name != nil {
+        reqBody["name"] = *name
+    }
+    if description != nil {
+        reqBody["description"] = *description
+    }
+    if price != nil {
+        reqBody["price"] = *price
+    }
+    if stockQuantity != nil {
+        reqBody["stock_quantity"] = *stockQuantity
+    }
+    if categoryID != nil {
+        reqBody["category_id"] = *categoryID
+    }
+
+    respBody, err := ps.httpClient.PUT(ctx, fmt.Sprintf("%s/products/%d", ps.baseURL, id), nil, reqBody)
+    if err != nil {
+        return nil, err
+    }
+
+    var product map[string]interface{}
+    if err := json.Unmarshal(respBody, &product); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return product, nil
+}
+
+// DeleteProduct calls products service delete endpoint
+func (ps *ProductService) DeleteProduct(ctx context.Context, id int64) (string, error) {
+    respBody, err := ps.httpClient.DELETE(ctx, fmt.Sprintf("%s/products/%d", ps.baseURL, id), nil)
+    if err != nil {
+        return "", err
+    }
+
+    return string(respBody), nil
+}
+
+// CreateCategory calls products service create category endpoint
+func (ps *ProductService) CreateCategory(ctx context.Context, name, description string) (map[string]interface{}, error) {
+    reqBody := map[string]interface{}{
+        "name": name,
+    }
+    if description != "" {
+        reqBody["description"] = description
+    }
+
+    respBody, err := ps.httpClient.POST(ctx, fmt.Sprintf("%s/categories", ps.baseURL), nil, reqBody)
+    if err != nil {
+        return nil, err
+    }
+
+    var category map[string]interface{}
+    if err := json.Unmarshal(respBody, &category); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return category, nil
+}
+
+func (ps *ProductService) GetInventory(ctx context.Context, productId int64)(map[string]interface{}, error){
+    respBody, err := ps.httpClient.GET(ctx,fmt.Sprintf("%s/inventory/%d", ps.baseURL,productId), nil)
+    if err != nil {
+        return nil, err
+    }
+
+    var inventory map[string]interface{}
+    if err := json.Unmarshal(respBody, &inventory); err != nil {
+        return nil, fmt.Errorf("failed to unmarshall response: %w", err)
+    }
+    return inventory, nil
+}
+
+// ReserveInventory calls products service reserve endpoint
+func (ps *ProductService) ReserveInventory(ctx context.Context, productID int64, quantity int) (map[string]interface{}, error) {
+    reqBody := map[string]interface{}{
+        "product_id": productID,
+        "quantity":   quantity,
+    }
+
+    respBody, err := ps.httpClient.POST(ctx, fmt.Sprintf("%s/inventory/reserve", ps.baseURL), nil, reqBody)
+    if err != nil {
+        return nil, err
+    }
+
+    var result map[string]interface{}
+    if err := json.Unmarshal(respBody, &result); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return result, nil
+}
+
+// ReleaseInventory calls products service release endpoint
+func (ps *ProductService) ReleaseInventory(ctx context.Context, productId int64, quantity int)(map[string]interface{}, error){
+    reqBody := map[string]interface{}{
+        "product_id": productId,
+        "quantity": quantity,
+    }
+
+    respBody, err := ps.httpClient.POST(ctx,fmt.Sprintf("%s/inventory/release",ps.baseURL),nil,reqBody)
+    if err != nil {
+        return nil, err
+    }
+    var result map[string]interface{}
+    if err := json.Unmarshal(respBody, &result); err != nil {
+        return nil, fmt.Errorf("failed to unmarshall response: %w", err)
+    }
+
+    return result, nil
+}
+
 // ============ CART SERVICE ============
 
 // CartService handles cart-related operations

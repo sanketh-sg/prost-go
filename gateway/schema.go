@@ -172,6 +172,25 @@ func BuildSchema(httpClient *HTTPClient, config *Config) *graphql.Schema {
         },
     })
 
+    //Inventory Type
+    inventoryType := graphql.NewObject(graphql.ObjectConfig{
+        Name: "Inventory",
+        Fields: graphql.Fields{
+            "product_id": &graphql.Field{
+                Type: graphql.NewNonNull(graphql.Int),
+            },
+            "total_quantity": &graphql.Field{
+                Type: graphql.NewNonNull(graphql.Int),
+            },
+            "reserved_quantity": &graphql.Field{
+                Type: graphql.NewNonNull(graphql.Int),
+            },
+            "available_quantity": &graphql.Field{
+                Type: graphql.NewNonNull(graphql.Int),
+            },
+        },
+    })
+
     // Auth response type
     authResponseType := graphql.NewObject(graphql.ObjectConfig{
         Name: "AuthResponse",
@@ -239,6 +258,17 @@ func BuildSchema(httpClient *HTTPClient, config *Config) *graphql.Schema {
                 Type: orderType,
                 Args: graphql.FieldConfigArgument{
                     "id": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.Int),
+                    },
+                },
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    return nil, nil
+                },
+            },
+            "inventory": &graphql.Field{
+                Type: inventoryType,
+                Args: graphql.FieldConfigArgument{
+                    "product_id": &graphql.ArgumentConfig{
                         Type: graphql.NewNonNull(graphql.Int),
                     },
                 },
@@ -319,6 +349,111 @@ func BuildSchema(httpClient *HTTPClient, config *Config) *graphql.Schema {
                 Type: orderType,
                 Args: graphql.FieldConfigArgument{
                     "id": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.Int),
+                    },
+                },
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    return nil, nil
+                },
+            },
+            "createProduct" : &graphql.Field{
+                Type: productType,
+                Args: graphql.FieldConfigArgument{
+                    "name": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.String),
+                    },
+                    "description": &graphql.ArgumentConfig{
+                        Type: graphql.String,
+                    },
+                    "price": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.Float),
+                    },
+                    "sku": &graphql.ArgumentConfig{
+                        Type: graphql.String,
+                    },
+                    "stock_quantity": &graphql.ArgumentConfig{
+                        Type: graphql.Int,
+                    },
+                    "category_id": &graphql.ArgumentConfig{
+                        Type: graphql.Int,
+                    },
+                },
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    return nil, nil
+                },      
+            },
+            "updateProduct": &graphql.Field{
+                Type: productType,
+                Args: graphql.FieldConfigArgument{
+                    "id": &graphql.ArgumentConfig{
+                    Type: graphql.NewNonNull(graphql.Int),
+                    },
+                    "name": &graphql.ArgumentConfig{
+                        Type: graphql.String,
+                    },
+                    "description": &graphql.ArgumentConfig{
+                        Type: graphql.String,
+                    },
+                    "price": &graphql.ArgumentConfig{
+                        Type: graphql.Float,
+                    },
+                    "stock_quantity": &graphql.ArgumentConfig{
+                        Type: graphql.Int,
+                    },
+                    "category_id": &graphql.ArgumentConfig{
+                    Type: graphql.Int,
+                    },
+                },
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    return nil, nil
+                },
+            },
+            "deleteProduct": &graphql.Field{
+                Type: graphql.String,
+                Args: graphql.FieldConfigArgument{
+                    "id": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.String),
+                    },
+                },
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    return nil, nil
+                },
+            },
+            "createCategory": &graphql.Field{
+                Type: categoryType,
+                Args: graphql.FieldConfigArgument{
+                    "name": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.String),
+                    },
+                    "description": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.String),
+                    },
+                },
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    return nil, nil
+                },
+            },
+            "reserveInventory": &graphql.Field{
+                Type: inventoryType,
+                Args: graphql.FieldConfigArgument{
+                    "product_id": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.Int),
+                    },
+                    "quantity": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.Int),
+                    },
+                },
+                Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+                    return nil, nil
+                },
+            },
+            "releaseInventory": &graphql.Field{
+                Type: inventoryType,
+                Args: graphql.FieldConfigArgument{
+                    "product_id": &graphql.ArgumentConfig{
+                        Type: graphql.NewNonNull(graphql.Int),
+                    },
+                    "quantity": &graphql.ArgumentConfig{
                         Type: graphql.NewNonNull(graphql.Int),
                     },
                 },

@@ -42,6 +42,7 @@ type MessagingTopology struct {
 func GetProstTopology() MessagingTopology {
     return MessagingTopology{
         Exchanges: []ExchangeConfig{
+            // ========== Main Event Exchanges ==========
             {
                 Name:       "products.events",
                 Type:       "topic",
@@ -56,6 +57,26 @@ func GetProstTopology() MessagingTopology {
             },
             {
                 Name:       "orders.events",
+                Type:       "topic",
+                Durable:    true,
+                AutoDelete: false,
+            },
+            
+            // ========== Dead Letter Exchanges ==========
+            {
+                Name:       "products.events.dlx",
+                Type:       "topic",
+                Durable:    true,
+                AutoDelete: false,
+            },
+            {
+                Name:       "cart.events.dlx",
+                Type:       "topic",
+                Durable:    true,
+                AutoDelete: false,
+            },
+            {
+                Name:       "orders.events.dlx",
                 Type:       "topic",
                 Durable:    true,
                 AutoDelete: false,

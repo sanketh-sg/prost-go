@@ -93,28 +93,28 @@ func (conn *Connection) SetupRabbitMQ(topology MessagingTopology) error{
 		log.Printf("Exchange created: %s (%s)", ex.Name, ex.Type)
 	}
 	
-	//DLX Dead Letter Exchange
-	dlxExchanges := []string{
-		"products.events.dlx",
-        "cart.events.dlx",
-        "orders.events.dlx",
-	}
+	// //DLX Dead Letter Exchange
+	// dlxExchanges := []string{
+	// 	"products.events.dlx",
+    //     "cart.events.dlx",
+    //     "orders.events.dlx",
+	// }
 
-	for _, dlx := range dlxExchanges {
-		err := conn.ch.ExchangeDeclare(
-			dlx,
-			"topic",
-			true,
-			false,
-			false,
-			false,
-			nil,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to declare DLX %s: %w", dlx, err)
-		}
-		 log.Printf("DLX created: %s", dlx)
-	}
+	// for _, dlx := range dlxExchanges {
+	// 	err := conn.ch.ExchangeDeclare(
+	// 		dlx,
+	// 		"topic",
+	// 		true,
+	// 		false,
+	// 		false,
+	// 		false,
+	// 		nil,
+	// 	)
+	// 	if err != nil {
+	// 		return fmt.Errorf("failed to declare DLX %s: %w", dlx, err)
+	// 	}
+	// 	 log.Printf("DLX created: %s", dlx)
+	// }
 
 	// Create Queues
 

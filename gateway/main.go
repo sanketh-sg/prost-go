@@ -11,7 +11,6 @@ import (
 
     "github.com/gin-gonic/gin"
     "github.com/joho/godotenv"
-    // "github.com/sanketh-sg/prost/gateway"
 )
 
 // ContextKey is a custom type for context keys
@@ -106,7 +105,7 @@ func (g *Gateway) setupRoutes() {
         c.JSON(http.StatusOK, FormatResult(result))
     })
 
-    // GraphQL introspection query
+    // GraphQL introspection query 
 	g.router.GET("/graphql", func(c *gin.Context) {
 		queryStr := c.Query("query")
 		if queryStr == "" {

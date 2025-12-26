@@ -163,6 +163,21 @@ func AttachResolvers(schema *graphql.Schema, ctx *ResolverContext) {
         }
     }
 
+    // inventory - Get product inventory status
+    if inventoryField, ok := queryFields["inventory"]; ok {
+        inventoryField.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+            productID := p.Args["product_id"].(int)
+
+            inventory, err := ctx.ProductService.GetInventory(p.Context, int64(productID))
+            if err != nil {
+                log.Printf("❌ Error fetching inventory: %v", err)
+                return nil, err
+            }
+
+            return inventory, nil
+        }
+    }
+
     // ========== MUTATION RESOLVERS ==========
 
     mutationFields := schema.MutationType().Fields()
@@ -283,5 +298,208 @@ func AttachResolvers(schema *graphql.Schema, ctx *ResolverContext) {
         }
     }
 
+    // createProduct - Create a new product (admin only)
+    if createProductField, ok := mutationFields["createProduct"]; ok {
+        createProductField.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+            // Verify authentication (admin operation)
+            user, err := GetUserFromContext(p.Context)
+            if err != nil {
+                return nil, fmt.Errorf("❌ unauthenticated - admin operation")
+            }
+            log.Printf("✓ Admin user %s creating product", user["email"])
+
+            // Extract arguments
+            name := p.Args["name"].(string)
+            price := p.Args["price"].(float64)
+            
+            var description, sku *string
+            var stockQuantity, categoryID *int
+            
+            if desc, ok := p.Args["description"]; ok {
+                if d, ok := desc.(string); ok && d != "" {
+                    description = &d
+                }
+            }
+            if s, ok := p.Args["sku"]; ok {
+                if sk, ok := s.(string); ok && sk != "" {
+                    sku = &sk
+                }
+            }
+            if sq, ok := p.Args["stock_quantity"]; ok {
+                if st, ok := sq.(int); ok {
+                    stockQuantity = &st
+                }
+            }
+            if cid, ok := p.Args["category_id"]; ok {
+                if ci, ok := cid.(int); ok {
+                    categoryID = &ci
+                }
+            }
+
+            product, err := ctx.ProductService.CreateProduct(
+                p.Context,
+                name,
+                *description,
+                price,
+                *sku,
+                stockQuantity,
+                categoryID,
+            )
+            if err != nil {
+                log.Printf("❌ Error creating product: %v", err)
+                return nil, err
+            }
+
+            log.Printf("✓ Product created: %s", name)
+            return product, nil
+        }
+    }
+
+    // updateProduct - Update an existing product (admin only)
+    if updateProductField, ok := mutationFields["updateProduct"]; ok {
+        updateProductField.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+            // Verify authentication (admin operation)
+            user, err := GetUserFromContext(p.Context)
+            if err != nil {
+                return nil, fmt.Errorf("❌ unauthenticated - admin operation")
+            }
+            log.Printf("✓ Admin user %s updating product", user["email"])
+
+            // Extract arguments
+            id := p.Args["id"].(int)
+            
+            var name, description *string
+            var price *float64
+            var stockQuantity, categoryID *int
+            
+            if n, ok := p.Args["name"]; ok {
+                if nm, ok := n.(string); ok && nm != "" {
+                    name = &nm
+                }
+            }
+            if d, ok := p.Args["description"]; ok {
+                if desc, ok := d.(string); ok && desc != "" {
+                    description = &desc
+                }
+            }
+            if pr, ok := p.Args["price"]; ok {
+                if prc, ok := pr.(float64); ok && prc > 0 {
+                    price = &prc
+                }
+            }
+            if sq, ok := p.Args["stock_quantity"]; ok {
+                if st, ok := sq.(int); ok {
+                    stockQuantity = &st
+                }
+            }
+            if cid, ok := p.Args["category_id"]; ok {
+                if ci, ok := cid.(int); ok {
+                    categoryID = &ci
+                }
+            }
+
+            product, err := ctx.ProductService.UpdateProduct(
+                p.Context,
+                int64(id),
+                name,
+                description,
+                price,
+                stockQuantity,
+                categoryID,
+            )
+            if err != nil {
+                log.Printf("❌ Error updating product: %v", err)
+                return nil, err
+            }
+
+            log.Printf("✓ Product %d updated", id)
+            return product, nil
+        }
+    }
+
+    // deleteProduct - Delete a product (admin only)
+    if deleteProductField, ok := mutationFields["deleteProduct"]; ok {
+        deleteProductField.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+            // Verify authentication (admin operation)
+            user, err := GetUserFromContext(p.Context)
+            if err != nil {
+                return nil, fmt.Errorf("❌ unauthenticated - admin operation")
+            }
+            log.Printf("✓ Admin user %s deleting product", user["email"])
+
+            id := p.Args["id"].(int)
+
+            message, err := ctx.ProductService.DeleteProduct(p.Context, int64(id))
+            if err != nil {
+                log.Printf("❌ Error deleting product: %v", err)
+                return nil, err
+            }
+
+            log.Printf("✓ Product %d deleted", id)
+            return message, nil
+        }
+    }
+
+    // createCategory - Create a new category (admin only)
+    if createCategoryField, ok := mutationFields["createCategory"]; ok {
+        createCategoryField.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+            // Verify authentication (admin operation)
+            user, err := GetUserFromContext(p.Context)
+            if err != nil {
+                return nil, fmt.Errorf("❌ unauthenticated - admin operation")
+            }
+            log.Printf("✓ Admin user %s creating category", user["email"])
+
+            name := p.Args["name"].(string)
+            var description string
+            if desc, ok := p.Args["description"]; ok {
+                if d, ok := desc.(string); ok {
+                    description = d
+                }
+            }
+
+            category, err := ctx.ProductService.CreateCategory(p.Context, name, description)
+            if err != nil {
+                log.Printf("❌ Error creating category: %v", err)
+                return nil, err
+            }
+
+            log.Printf("✓ Category created: %s", name)
+            return category, nil
+        }
+    }
+
+    //reserveInventory - Reserve product inventory
+    if reserveField, ok := mutationFields["reserveInventory"]; ok {
+        reserveField.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+            productId := p.Args["product_id"].(int)
+            quantity := p.Args["quantity"].(int)
+
+            result, err := ctx.ProductService.ReserveInventory(p.Context,int64(productId),quantity)
+            if err != nil {
+                log.Printf("Error reserving inventory: %v", err)
+            }
+            log.Printf("Reserved %d units of product %d", quantity, productId)
+            return result, nil
+        }
+    }
+
+    // releaseInventory - Release reserved inventory
+    if releaseField, ok := mutationFields["releaseInventory"]; ok {
+        releaseField.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+            productID := p.Args["product_id"].(int)
+            quantity := p.Args["quantity"].(int)
+
+            result, err := ctx.ProductService.ReleaseInventory(p.Context, int64(productID), quantity)
+            if err != nil {
+                log.Printf("❌ Error releasing inventory: %v", err)
+                return nil, err
+            }
+
+            log.Printf("✓ Released %d units of product %d", quantity, productID)
+            return result, nil
+        }
+    }
+    
     log.Println("✓ Resolvers attached to schema")
 }
