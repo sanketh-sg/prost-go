@@ -14,15 +14,12 @@ import (
 
 // UserHandler handles user-related HTTP requests
 type UserHandler struct {
-    userRepo         *repository.UserRepository
+    userRepo         repository.UserRepositoryInterface
     jwtManager       *auth.JWTManager
 }
 
 // NewUserHandler creates a new user handler
-func NewUserHandler(
-    userRepo *repository.UserRepository,
-    jwtSecret string,
-) *UserHandler {
+func NewUserHandler(userRepo repository.UserRepositoryInterface,jwtSecret string,) *UserHandler {
     return &UserHandler{
         userRepo:         userRepo,
         jwtManager:       auth.NewJWTManager(jwtSecret),
