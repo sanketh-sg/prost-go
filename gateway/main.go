@@ -51,11 +51,6 @@ func (g *Gateway) setupRoutes() {
     // CORS middleware
     g.router.Use(corsMiddleware())
 
-    // Health check
-    g.router.GET("/health", func(c *gin.Context) {
-        c.JSON(http.StatusOK, gin.H{"status": "healthy"})
-    })
-
     // Build GraphQL schema
     schema := BuildSchema(g.httpClient, g.config)
 
@@ -117,6 +112,13 @@ func (g *Gateway) setupRoutes() {
 		c.JSON(http.StatusOK, FormatResult(result))
 	})
 
+    
+    // Health check
+    g.router.GET("/health", func(c *gin.Context) {
+        c.JSON(http.StatusOK, gin.H{"status": "healthy"})
+    })
+
+    
     log.Println("✓ Routes configured")
 }
 

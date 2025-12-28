@@ -16,7 +16,8 @@ type MockUserRepository struct {
     EmailExistsFunc    func(ctx context.Context, email string) (bool, error)
     UsernameExistsFunc func(ctx context.Context, username string) (bool, error)
 	DeleteUserFunc     func(ctx context.Context, id string) error
-
+// function stubs are good when there are different outcomes in a function
+//the function fields are just a way to ensure the method exists AND let us inject custom behavior.
 }
 
 func (m *MockUserRepository) CreateUser(ctx context.Context, user *models.User) error {

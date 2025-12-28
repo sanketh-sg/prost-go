@@ -95,5 +95,5 @@ GET /graphql - for introspection, query is present in URL
       }
     }
 
-9️⃣  Client (Apollo Studio) receives formatted response ✓
+9️⃣  Client (Apollo Studio) receives formatted response 
     Displays user info + token for subsequent authenticated queries

@@ -166,11 +166,38 @@ Product list, product detail, cart, checkout, orders, user profile
 
 Full user journey: register → browse products → add to cart → checkout → order confirmation
 Quick Reference: Which Service Handles What
-Component	Service	Pattern
-User authentication	Users	Synchronous REST + JWT
-Product catalog	Products	Async events (stock changes)
-Shopping cart	Cart	Async events + saga state
-Order creation	Orders	Saga orchestrator (choreography)
-Event publishing	All services	RabbitMQ with DLQ
-API aggregation	Gateway	GraphQL + REST to services
+
+Component	            Service	        Pattern
+User authentication	    Users	        Synchronous REST + JWT
+Product catalog	        Products	    Async events (stock changes)
+Shopping cart	        Cart	        Async events + saga state
+Order creation	        Orders	        Saga orchestrator (choreography)
+Event publishing	    All services	RabbitMQ with DLQ
+API aggregation	        Gateway	        GraphQL + REST to services
+
 Start with: Phase 1 (shared packages) → Phase 2 (database schema) → Phase 3 (users service). All prerequisite for later phases.
+
+--------------------------------------------------
+The current implementation has a gap: if event publishing fails after DB write, there's no automatic retry mechanism. The correct solution is the Outbox Pattern: write the product to DB AND write the event to an outbox table in the same transaction. A background service polls the outbox every second, publishes unpublished events, and marks them as published. If publishing fails, it retries with exponential backoff, and after N retries, moves to a dead-letter queue. This guarantees:
+
+Atomicity: Product and outbox entry both succeed or fail together
+Durability: Events are safely persisted before publishing
+Reliability: Background service ensures eventual delivery with retries
+Observability: We can track which events failed and why
+
+Event Sourcing + Outbox Pattern to deal with dual write problem.
+
+We handle the dual write problem using an event-first pattern: write to the database first, then publish events. This ensures if event publishing fails, the database change is persisted and can be retried. We prevent duplicate processing using idempotency keys—each event has a unique event_id that we check before processing. If the same event is retried due to network issues, we recognize it and skip it. For multi-step operations (sagas), we track the state machine in the database and use correlation IDs to link all related events together. If any step fails, we log compensation actions and can rollback in reverse order. This gives us exactly-once semantics on top of an at-least-once delivery model.
+
+But, 
+The Outbox Pattern's main drawbacks are:
+
+Latency: Polling every N seconds means 6+ second delay before events are published. For real-time systems, this is unacceptable.
+
+Operational Complexity: You need to manage outbox table cleanup (it grows unbounded), handle stuck/locked events, detect deadlocks, and deal with distributed locking across multiple instances.
+
+Race Conditions: Without careful locking, the same event can be published multiple times. You need pessimistic locking (locked_until columns) which adds more DB queries.
+
+smart retry approach: after writing to the database, spawn a goroutine that retries event publishing with exponential backoff (100ms, 200ms, 400ms...). RabbitMQ persistence ensures if our service crashes, the broker retains the message. Idempotency keys in receivers prevent duplicates anyway. This gives us reliability without the operational burden.
+
+The 'Listen to Yourself' or CDC pattern is elegant: store events in the service's own database as part of the same transaction that creates the entity. This guarantees atomicity—both succeed or both fail. Then use a background listener to poll the event table and publish to RabbitMQ. The benefits are cleaner code (handler doesn't handle failures), automatic audit trail, and eventual consistency. The tradeoff is latency from polling.

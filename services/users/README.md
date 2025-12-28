@@ -84,7 +84,7 @@ mockRepo.AssertExpectations(t)
 // "Was CreateUser called as expected?"
 ```
 
-Should I test this??
+Should I test this?? If it has business logic then always yes.
 ```
 Is this code...?
 │
@@ -125,3 +125,5 @@ Using mock you can create fake data, database.
 ARRANGE: We create a fake user and mock repo that returns it
 ACT: We call handler.functions with test data
 ASSERT: We check the response
+
+For repository tests, I setup a test database connection once, run migrations to create schema, then after each test I clean up by deleting test data or rolling back transactions. This ensures test isolation.
