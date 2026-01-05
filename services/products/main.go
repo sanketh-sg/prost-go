@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-    "encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -16,89 +15,86 @@ import (
 	"github.com/sanketh-sg/prost/services/products/middleware"
 	"github.com/sanketh-sg/prost/services/products/repository"
 	"github.com/sanketh-sg/prost/shared/db"
-    "github.com/sanketh-sg/prost/shared/events"
 	"github.com/sanketh-sg/prost/shared/messaging"
 )
 
-
-func main()  {
+func main() {
 	//Load env variables
 
-    err := godotenv.Load(".env")
+	err := godotenv.Load(".env")
 
-    if err != nil {
-        log.Fatalf("Error loading .env file: %v", err)
-    }
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 
 	serviceName := os.Getenv("SERVICE_NAME")
-	if serviceName == ""{
-        log.Println("Using default service name...")
+	if serviceName == "" {
+		log.Println("Using default service name...")
 		serviceName = "products"
 	}
 
 	port := os.Getenv("PORT_PRODUCT")
 	if port == "" {
-        log.Println("Using default port...")
+		log.Println("Using default port...")
 		port = "8080"
 	}
 
 	dbSchema := os.Getenv("DB_SCHEMA")
 	if dbSchema == "" {
-        log.Println("Using default schema...")
+		log.Println("Using default schema...")
 		dbSchema = "catalog"
 	}
 
 	rabbitmqURL := os.Getenv("RABBITMQ_URL")
-    if rabbitmqURL == "" {
-        log.Panicln("Using default rabbitmqURL")
-        rabbitmqURL = "amqp://guest:guest@localhost:5672/"
-    }
+	if rabbitmqURL == "" {
+		log.Panicln("Using default rabbitmqURL")
+		rabbitmqURL = "amqp://guest:guest@localhost:5672/"
+	}
 
 	// Set Gin Mode
 	// gin.SetMode(gin.ReleaseMode) // Disables debug logging, colorised output, better and faster
 
 	log.Println("=== Products Service Starting ===")
-    log.Printf("Service: %s", serviceName)
-    log.Printf("Port: %s", port)
-    log.Printf("Schema: %s", dbSchema)
+	log.Printf("Service: %s", serviceName)
+	log.Printf("Port: %s", port)
+	log.Printf("Schema: %s", dbSchema)
 
 	// DB Connection
 	log.Println("\nConnecting to PostgreSQL...")
-    dbConn, err := db.NewDBConnection(db.Config{
-        Host:     os.Getenv("HOST"),
-        Port:     os.Getenv("PORT_DB"),
-        User:     os.Getenv("USER"),
-        Password: os.Getenv("PASSWORD"),
-        DBName:   os.Getenv("DBNAME"),
-        Schema:   dbSchema,
-    })
+	dbConn, err := db.NewDBConnection(db.Config{
+		Host:     os.Getenv("HOST"),
+		Port:     os.Getenv("PORT_DB"),
+		User:     os.Getenv("USER"),
+		Password: os.Getenv("PASSWORD"),
+		DBName:   os.Getenv("DBNAME"),
+		Schema:   dbSchema,
+	})
 	if err != nil {
 		log.Fatalf("Database connection failed: %v", err)
 	}
 	defer dbConn.DBConnClose()
 	log.Println("Product-->Database connected")
 
-
 	//RabbitMQ connection
 	log.Println("\nConnecting to RabbitMQ...")
 	rmqConn, err := messaging.NewRmqConnection(rabbitmqURL)
 	if err != nil {
-        log.Fatalf("RabbitMQ connection failed: %v", err)
-    }
+		log.Fatalf("RabbitMQ connection failed: %v", err)
+	}
 	defer rmqConn.Close()
 
 	//Setup RabbitMQ Topology
 	topology := messaging.GetProstTopology()
-	if err := rmqConn.SetupRabbitMQ(topology); err != nil{
+	if err := rmqConn.SetupRabbitMQ(topology); err != nil {
 		log.Fatalf("RabbitMQ setup failed: %v", err)
 	}
 	log.Println("RabbitMQ connected and topology ready")
 
-    // Initialize repositories
-    productRepo := repository.NewProductRepository(dbConn)
-    categoryRepo := repository.NewCategoryRepository(dbConn)
-    inventoryRepo := repository.NewInventoryReservationRepository(dbConn)
-    idempotencyStore := db.NewIdempotencyStore(dbConn)
+	// Initialize repositories
+	productRepo := repository.NewProductRepository(dbConn)
+	categoryRepo := repository.NewCategoryRepository(dbConn)
+	inventoryRepo := repository.NewInventoryReservationRepository(dbConn)
+	idempotencyStore := db.NewIdempotencyStore(dbConn)
 
 	// Initialize event publisher
 	publisher := messaging.NewPublisher(rmqConn, "products.events")
@@ -107,16 +103,16 @@ func main()  {
 	subscriber := messaging.NewSubscriber(rmqConn, "products.events.queue")
 
 	// Initialize handlers
-    productHandler := handlers.NewProductHandler(
-        productRepo,
-        categoryRepo,
-        inventoryRepo,
-        idempotencyStore,
-        publisher,
-    )
+	productHandler := handlers.NewProductHandler(
+		productRepo,
+		categoryRepo,
+		inventoryRepo,
+		idempotencyStore,
+		publisher,
+	)
 
 	// Create Gin router
-    router := gin.New()
+	router := gin.New()
 
 	//Add Middlewares
 	router.Use(gin.Logger())
@@ -124,101 +120,106 @@ func main()  {
 	router.Use(middleware.CORSMiddleware())
 
 	// Public routes
-    router.GET("/health", productHandler.Health)
-    router.GET("/categories", productHandler.GetCategories)
-    router.GET("/categories/:id", productHandler.GetCategory)
-    router.GET("/products", productHandler.GetProducts)
-    router.GET("/products/:id", productHandler.GetProduct)
+	router.GET("/health", productHandler.Health)
+	router.GET("/categories", productHandler.GetCategories)
+	router.GET("/categories/:id", productHandler.GetCategory)
+	router.GET("/products", productHandler.GetProducts)
+	router.GET("/products/:id", productHandler.GetProduct)
 
-	// Admin routes (TODO: add authentication middleware in gateway)
-    router.POST("/products", productHandler.CreateProduct)
-    router.PATCH("/products/:id", productHandler.UpdateProduct)
-    router.DELETE("/products/:id", productHandler.DeleteProduct)
-    router.POST("/categories", productHandler.CreateCategory)
+	// Admin routes
+	router.POST("/products", productHandler.CreateProduct)
+	router.PATCH("/products/:id", productHandler.UpdateProduct)
+	router.DELETE("/products/:id", productHandler.DeleteProduct)
+	router.POST("/categories", productHandler.CreateCategory)
 
-    // Inventory routes
-    router.GET("/inventory/:product_id", productHandler.GetInventory)
-    router.POST("/inventory/reserve", productHandler.ReserveInventory)
-    router.POST("/inventory/release", productHandler.ReleaseInventory)
+	// Inventory routes
+	router.GET("/inventory/:product_id", productHandler.GetInventory)
+	// router.POST("/inventory/reserve", productHandler.ReserveInventory)
+	// router.POST("/inventory/release", productHandler.ReleaseInventory)
 
+	eventHandler := handlers.NewEventHandler(inventoryRepo, idempotencyStore, publisher)
 
 	// Server setup
-    server := &http.Server{
-        Addr:         ":" + port,
-        Handler:      router,
-        ReadTimeout:  15 * time.Second,
-        WriteTimeout: 15 * time.Second,
-        IdleTimeout:  60 * time.Second,
-    }
-	 // Start event subscriber in goroutine
-    log.Println("\nStarting event subscriber...")
-    
-    go func() {
-        log.Println("\nStarting event subscriber for inventory updates...")
-        log.Println("Listening for inventory update events (product.*)...")
-        // Define the handler for inventory update events
-        handler := func(message []byte) error {
-            log.Printf("Processing inventory event: %s", string(message))
-            
-            var stockReserved events.StockReservedEvent
-            if err := json.Unmarshal(message, &stockReserved); err == nil && stockReserved.EventType == "stock.reserved" {
-                return handlers.HandleStockReserved(context.Background(), &stockReserved, inventoryRepo)
-            }
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	// Start event subscriber in goroutine
+	log.Println("\nStarting event subscriber...")
 
-            // Try to parse as StockReleasedEvent
-            var stockReleased events.StockReleasedEvent
-            if err := json.Unmarshal(message, &stockReleased); err == nil && stockReleased.EventType == "stock.released" {
-                return handlers.HandleStockReleased(context.Background(), &stockReleased, inventoryRepo)
-            }
+	go func() {
+		log.Println("\nStarting event subscriber for inventory updates...")
+		log.Println("Listening for inventory update events (product.*)...")
+		// Define the handler for inventory update events
+		handler := func(message []byte) error {
+			log.Printf("Processing inventory event: %s", string(message))
 
-            // Unknown event type - log and skip
-            log.Printf("⚠️  Unknown event type received: %s", string(message))
-            return nil
+            ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+            defer cancel()
+            return eventHandler.HandleEvent(ctx, message)
 
-            // // Parse the event
-            // event, err := subscriber.ParseEvent(message)
-            // if err != nil {
-            //     return fmt.Errorf("failed to parse event: %w", err)
-            // }
-            
-            // // Handle the event based on type
-            // // For now, just log it
-            // log.Printf("Event received: %v", event)
-            // return nil
-        }
-        
-        // Subscribe with retry logic
-        if err := subscriber.SubscribeWithRetry(handler, 3); err != nil {
-            log.Fatalf("Subscriber error: %v", err)
-        }
-    }()
+			// var stockReserved events.StockReservedEvent
+			// if err := json.Unmarshal(message, &stockReserved); err == nil && stockReserved.EventType == "stock.reserved" {
+			// 	return handlers.HandleStockReserved(context.Background(), &stockReserved, inventoryRepo)
+			// }
 
-    // Start server in goroutine
-    log.Printf("\n Products service listening on :%s", port)
-    log.Println("\n=== Service Ready ===")
+			// // Try to parse as StockReleasedEvent
+			// var stockReleased events.StockReleasedEvent
+			// if err := json.Unmarshal(message, &stockReleased); err == nil && stockReleased.EventType == "stock.released" {
+			// 	return handlers.HandleStockReleased(context.Background(), &stockReleased, inventoryRepo)
+			// }
 
-    _ = subscriber // Keep reference to prevent GC
+			// // Unknown event type - log and skip
+			// log.Printf("⚠️  Unknown event type received: %s", string(message))
+			// return nil
 
-    go func() {
-        if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            log.Fatalf("Server error: %v", err)
-        }
-    }()
+			// // Parse the event
+			// event, err := subscriber.ParseEvent(message)
+			// if err != nil {
+			//     return fmt.Errorf("failed to parse event: %w", err)
+			// }
 
-    // Graceful shutdown
-    sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+			// // Handle the event based on type
+			// // For now, just log it
+			// log.Printf("Event received: %v", event)
+			// return nil
+		}
 
-    sig := <-sigChan
-    log.Printf("\nReceived signal: %v", sig)
-    log.Println("Shutting down gracefully...")
+		// Subscribe with retry logic
+		if err := subscriber.SubscribeWithRetry(handler, 3); err != nil {
+			log.Fatalf("Subscriber error: %v", err)
+		}
+	}()
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	// Start server in goroutine
+	log.Printf("\n Products service listening on :%s", port)
+	log.Println("\n=== Service Ready ===")
 
-    if err := server.Shutdown(ctx); err != nil {
-        log.Printf("Shutdown error: %v", err)
-    }
+	_ = subscriber // Keep reference to prevent GC
 
-    log.Println("✓ Service stopped")
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	// Graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	sig := <-sigChan
+	log.Printf("\nReceived signal: %v", sig)
+	log.Println("Shutting down gracefully...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Shutdown error: %v", err)
+	}
+
+	log.Println("✓ Service stopped")
 }

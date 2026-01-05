@@ -235,20 +235,35 @@ PostgreSQL Server
 │   │   ├── categories   id | name | description | created_at | updated_at | deleted_at 
 │   │                   ----+------+-------------+------------+------------+------------
 │   │   └── inventory_reservations  id | product_id | quantity | order_id | reservation_id | status | created_at | expires_at | released_at
-│   │                              ----+------------+----------+----------+----------------+--------+------------+------------+-------------
+│   │   │                          ----+------------+----------+----------+----------------+--------+------------+------------+-------------
+│   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
+│   │                           ----+----------+--------------+--------+--------+------------
 │   ├── Schema: users
 │   │   └── users  id | email | username | password_hash | created_at | updated_at | deleted_at 
 │   │             ----+-------+----------+---------------+------------+------------+------------
+│   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
+│   │                           ----+----------+--------------+--------+--------+------------
 │   ├── Schema: cart
 │   │   ├── carts   id | user_id | status | total | created_at | updated_at | abandoned_at 
 │   │              ----+---------+--------+-------+------------+------------+--------------
 │   │   └── cart_items   id | cart_id | product_id | quantity | price | created_at | updated_at 
 │   │                   ----+---------+------------+----------+-------+------------+------------
+│   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
+│   │                           ----+----------+--------------+--------+--------+------------
 │   └── Schema: orders
 │   │   ├── orders  id | user_id | cart_id | total | status | saga_correlation_id | created_at | updated_at | shipped_at | delivered_at | cancelled_at 
 │   │              ----+---------+---------+-------+--------+---------------------+------------+------------+------------+--------------+--------------
 │   │   └── order_items  id | order_id | product_id | quantity | price | created_at 
 │   │                   ----+----------+------------+----------+-------+------------
+│   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
+│   │                           ----+----------+--------------+--------+--------+------------
+│   │   └── compensation_log   id | order_id | saga_correlation_id | compensation_event | compensation_payload | status | created_at | completed_at 
+│   │                         ----+----------+---------------------+--------------------+----------------------+--------+------------+--------------
+│   │   └── inventory_reservations   id | order_id | product_id | quantity | reservation_id | status | created_at | expires_at | released_at | fulfilled_at 
+│   │                               ----+----------+------------+----------+----------------+--------+------------+------------+-------------+--------------
+│   │   └── saga_states   id | correlation_id | saga_type | status | order_id | payload | compensation_log | created_at | updated_at | expires_at 
+│   │                    ----+----------------+-----------+--------+----------+---------+------------------+------------+------------+------------
+│   │
 ├── Database: analytics
 │   └── Schema: public
 │       └── reports
@@ -288,3 +303,13 @@ SELECT COUNT(*) FROM catalog.categories;
 -- View sample data with formatting
 SELECT id, name, price, stock_quantity FROM catalog.products LIMIT 10;
 ```
+
+## Idempotency
+
+No matter how many time you repeat an operation it should result in same outcome.
+
+RabbitMQ guarantees atleast once delivery of events, so will retry delivering the event until it receives an ACK from consumer. This will lead to duplicate evevnts being published to consumers in case of any network failures while receiving ACK. In order to handle that scenario we implement idempotency.
+
+How it works?
+
+Every event has a unique ID, before processing that event it is checked if it is processed or not by the consuming service.

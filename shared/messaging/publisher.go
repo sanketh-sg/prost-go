@@ -64,8 +64,8 @@ func (pub *Publisher) PublishProductEvent(ctx context.Context, event interface{}
 	var routingKey string
 
 	switch event.(type) { //The switch itself performs the type comparison internally.
-	case events.ProductCreatedEvent: routingKey = "product.created"
-	case events.ProductUpdatedEvent: routingKey = "product.updated"
+	// case events.ProductCreatedEvent: routingKey = "product.created"
+	// case events.ProductUpdatedEvent: routingKey = "product.updated"
 	case events.StockReservedEvent: routingKey = "product.stock.reserved"
 	case events.StockReleasedEvent: routingKey = "product.stock.released"
 	default:

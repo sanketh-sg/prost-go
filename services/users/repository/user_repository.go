@@ -49,7 +49,7 @@ func (userRepo *UserRepository) CreateUser(ctx context.Context, user *models.Use
 		user.PasswordHash,
 		user.CreatedAt,
 		user.UpdatedAt,
-	).Scan(&user.ID,&user.Email,&user.Username,&user.CreatedAt,&user.UpdatedAt) //copies the matched row to dest
+	).Scan(&user.ID,&user.Email,&user.Username,&user.CreatedAt,&user.UpdatedAt) //copies the matched row to dest and Converts bytes to proper types
 
     if err != nil {
         log.Printf("Error creating user: %v", err)

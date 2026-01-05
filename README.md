@@ -178,7 +178,12 @@ API aggregation	        Gateway	        GraphQL + REST to services
 Start with: Phase 1 (shared packages) → Phase 2 (database schema) → Phase 3 (users service). All prerequisite for later phases.
 
 --------------------------------------------------
-The current implementation has a gap: if event publishing fails after DB write, there's no automatic retry mechanism. The correct solution is the Outbox Pattern: write the product to DB AND write the event to an outbox table in the same transaction. A background service polls the outbox every second, publishes unpublished events, and marks them as published. If publishing fails, it retries with exponential backoff, and after N retries, moves to a dead-letter queue. This guarantees:
+### Dual write problem
+Happens when data needs to be written on 2 systems that are not connected.
+
+The current implementation has a gap: if event publishing fails after DB write, there's no automatic retry mechanism. Event publishing has no automatic retry mechanism—if publishing fails after DB write, the event is lost (silently logged, never published to other services).
+
+The correct solution is the Outbox Pattern: write the product to DB AND write the event to an outbox table in the same transaction. A background service polls the outbox every second, publishes unpublished events, and marks them as published. If publishing fails, it retries with exponential backoff, and after N retries, moves to a dead-letter queue. This guarantees:
 
 Atomicity: Product and outbox entry both succeed or fail together
 Durability: Events are safely persisted before publishing
@@ -201,3 +206,9 @@ Race Conditions: Without careful locking, the same event can be published multip
 smart retry approach: after writing to the database, spawn a goroutine that retries event publishing with exponential backoff (100ms, 200ms, 400ms...). RabbitMQ persistence ensures if our service crashes, the broker retains the message. Idempotency keys in receivers prevent duplicates anyway. This gives us reliability without the operational burden.
 
 The 'Listen to Yourself' or CDC pattern is elegant: store events in the service's own database as part of the same transaction that creates the entity. This guarantees atomicity—both succeed or both fail. Then use a background listener to poll the event table and publish to RabbitMQ. The benefits are cleaner code (handler doesn't handle failures), automatic audit trail, and eventual consistency. The tradeoff is latency from polling.
+
+Option 1: use a exponential backoff stratagy which runs as a go routine after DB write publishing the event fixed number of times.
+Option 2: Write the products, events to an seperate outbox DB in a single transaction, which is polled by a service to emit the event.
+Option 3: Add a trigger to the product table to generate entry into events table, which is polled by a seperate service using  change data capture.
+
+Downtream services must handle duplicates.

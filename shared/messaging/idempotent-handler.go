@@ -44,8 +44,8 @@ func (ih *IdempotentHandler) Handle(ctx context.Context, data []byte) error {
     // Check if already processed
     processed, err := ih.idempotencyStore.IsProcessed(ctx, eventID, ih.serviceName)
     if err != nil {
-        log.Printf("⚠️  Failed to check idempotency: %v", err)
-        // Continue anyway - better to process twice than not at all
+        log.Printf("❌ Critical: Failed to check idempotency for event %s: %v", eventID, err)
+        return fmt.Errorf("idempotency check failed: %w", err)
     }
 
     if processed {

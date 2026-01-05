@@ -9,7 +9,7 @@ import (
 )
 
 // BuildSchema builds the complete GraphQL schema
-func BuildSchema(httpClient *HTTPClient, config *Config) *graphql.Schema {
+func BuildSchema() *graphql.Schema {
     timestampType := graphql.NewScalar(graphql.ScalarConfig{
         Name:        "Timestamp",
         Description: "RFC3339 timestamp",

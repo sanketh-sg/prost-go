@@ -190,3 +190,65 @@ func (ir *InventoryReservationRepository) GetProductReservations(ctx context.Con
 
     return totalReserved, nil
 }
+
+// UpdateReservationStatusByOrderID updates all reservations for an order to a new status
+// Used when order is confirmed, failed, or cancelled
+func (ir *InventoryReservationRepository) UpdateReservationStatusByOrderID(ctx context.Context, orderID string, status string) error {
+    query := `
+        UPDATE $schema.inventory_reservations
+        SET status = $1, updated_at = NOW()
+        WHERE order_id::text = $2
+    `
+
+    query = replaceSchema(query, ir.conn.Schema)
+
+    result, err := ir.conn.ExecContext(ctx, query, status, orderID)
+    if err != nil {
+        log.Printf("Error updating reservation status: %v", err)
+        return fmt.Errorf("failed to update reservation status: %w", err)
+    }
+
+    rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to get rows affected: %w", err)
+    }
+
+    if rowsAffected == 0 {
+        log.Printf("⚠️  No reservations found for order %s", orderID)
+        return nil // Don't fail if no reservations found (idempotency)
+    }
+
+    log.Printf("✓ Updated %d reservation(s) to status '%s' for order %s", rowsAffected, status, orderID)
+    return nil
+}
+
+// UpdateReservationStatus updates a single reservation status by order ID (for confirmed orders)
+// Used when we know the exact order ID as int64
+func (ir *InventoryReservationRepository) UpdateReservationStatus(ctx context.Context, orderID int64, status string) error {
+    query := `
+        UPDATE $schema.inventory_reservations
+        SET status = $1, updated_at = NOW()
+        WHERE order_id = $2
+    `
+
+    query = replaceSchema(query, ir.conn.Schema)
+
+    result, err := ir.conn.ExecContext(ctx, query, status, orderID)
+    if err != nil {
+        log.Printf("Error updating reservation status: %v", err)
+        return fmt.Errorf("failed to update reservation status: %w", err)
+    }
+
+    rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to get rows affected: %w", err)
+    }
+
+    if rowsAffected == 0 {
+        log.Printf("⚠️  No reservations found for order %d", orderID)
+        return nil // Don't fail if no reservations found (idempotency)
+    }
+
+    log.Printf("✓ Updated %d reservation(s) to status '%s' for order %d", rowsAffected, status, orderID)
+    return nil
+}

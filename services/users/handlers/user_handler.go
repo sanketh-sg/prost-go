@@ -14,7 +14,7 @@ import (
 
 // UserHandler handles user-related HTTP requests
 type UserHandler struct {
-    userRepo         repository.UserRepositoryInterface
+    userRepo         repository.UserRepositoryInterface // Takes any implementation of UserRepositoryInterface
     jwtManager       *auth.JWTManager
 }
 

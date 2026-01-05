@@ -52,7 +52,8 @@ func (g *Gateway) setupRoutes() {
     g.router.Use(corsMiddleware())
 
     // Build GraphQL schema
-    schema := BuildSchema(g.httpClient, g.config)
+    // schema := BuildSchema(g.httpClient, g.config)
+    schema := BuildSchema()
 
     // Create service clients
     userService := NewUserService(g.config.UsersServiceURL, g.httpClient)
@@ -130,6 +131,9 @@ func (g *Gateway) Run() error {
     server := &http.Server{
         Addr:    ":" + g.config.Port,
         Handler: g.router,
+        ReadTimeout:  15 * time.Second,
+        WriteTimeout: 30 * time.Second,
+        IdleTimeout:  120 * time.Second,
     }
 
     // Start server in background

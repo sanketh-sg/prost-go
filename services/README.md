@@ -65,4 +65,9 @@ In distributed systems, messages can be delivered twice or more due to network f
 
 UNIQUE(event_id, service_name) ensures the same event from the same service can only be recorded once.
 
-Each service has its own idempotency table, as they have seperate schema we keep them seprate
+Each service has its own idempotency table, as they have seperate schema we keep them seprate.
+
+replaceSchema is used to prevent hard coding of schema names in queries. Any changes to schema name will result in modifying the queries everywhere which is bad standards.
+
+repository holds a connection to DB, any transaction uses this to modify the DB. QueryRowContext executes the query on 1 row. QueryContext returns multiple rows.  Scan copies data from a database result row into Go variables. It handles type conversion (database bytes → Go types like string, int, time.Time), maps columns to variables in order, and detects errors like missing rows or type mismatches. You must pass pointers to Scan (using &) so it can modify your variables. Without Scan, you'd have raw bytes from the database that can't be used in your Go code. It's essential for every database read operation. 
+ExecContext only executes queries and does not return any rows.
