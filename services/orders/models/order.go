@@ -42,7 +42,7 @@ type SagaState struct {
     CartID           string                 `json:"cart_id"`
     UserID           string                 `json:"user_id"`
     Payload          map[string]interface{} `json:"payload"`
-    CompensationLog  []string               `json:"compensation_log"`
+    CompensationLog  []string               `json:"compensation_log"` // list of compensation actions
     CreatedAt        time.Time              `json:"created_at"`
     UpdatedAt        time.Time              `json:"updated_at"`
     ExpiresAt        time.Time              `json:"expires_at"`

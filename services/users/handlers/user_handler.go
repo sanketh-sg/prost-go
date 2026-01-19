@@ -73,7 +73,7 @@ func (uh *UserHandler) Register(c *gin.Context) {
     if exists {
         c.JSON(http.StatusConflict, models.ErrorResponse{
             Error:   "email already exists",
-            Message: "",
+            Message: "email exists",
             Code:    http.StatusConflict,
         })
         return
@@ -92,7 +92,7 @@ func (uh *UserHandler) Register(c *gin.Context) {
     if exists {
         c.JSON(http.StatusConflict, models.ErrorResponse{
             Error:   "username already exists",
-            Message: "",
+            Message: "username exists",
             Code:    http.StatusConflict,
         })
         return

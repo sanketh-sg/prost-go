@@ -70,3 +70,17 @@ Orders Service (SagaOrchestrator)
 ├─ TRACKS saga state (pending → confirmed → failed)
 ├─ MAKES DECISIONS (what to do next)
 └─ LOGS COMPENSATION (what to undo if failure)
+
+│   └── Schema: orders
+│   │   ├── orders  id | user_id | cart_id | total | status | saga_correlation_id | created_at | updated_at | shipped_at | delivered_at | cancelled_at 
+│   │              ----+---------+---------+-------+--------+---------------------+------------+------------+------------+--------------+--------------
+│   │   └── order_items  id | order_id | product_id | quantity | price | created_at 
+│   │                   ----+----------+------------+----------+-------+------------
+│   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
+│   │                           ----+----------+--------------+--------+--------+------------
+│   │   └── compensation_log   id | order_id | saga_correlation_id | compensation_event | compensation_payload | status | created_at | completed_at 
+│   │                         ----+----------+---------------------+--------------------+----------------------+--------+------------+--------------
+│   │   └── inventory_reservations   id | order_id | product_id | quantity | reservation_id | status | created_at | expires_at | released_at | fulfilled_at 
+│   │                               ----+----------+------------+----------+----------------+--------+------------+------------+-------------+--------------
+│   │   └── saga_states   id | correlation_id | saga_type | status | order_id | payload | compensation_log | created_at | updated_at | expires_at 
+│   │                    ----+----------------+-----------+--------+----------+---------+------------------+------------+------------+------------

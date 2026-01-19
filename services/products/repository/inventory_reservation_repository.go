@@ -252,3 +252,34 @@ func (ir *InventoryReservationRepository) UpdateReservationStatus(ctx context.Co
     log.Printf("✓ Updated %d reservation(s) to status '%s' for order %d", rowsAffected, status, orderID)
     return nil
 }
+
+func(ir *InventoryReservationRepository) GetProductInventory(ctx context.Context, productID int64)(*models.ProductInventory, error){
+    productQuery := `
+        SELECT id, stock_quantity
+        FROM $schema.products
+        WHERE id = $1
+    `
+    productQuery = replaceSchema(productQuery, ir.conn.Schema)
+    
+    var id int64
+    var stockQuantity int
+    err := ir.conn.QueryRowContext(ctx, productQuery, productID).Scan(&id, &stockQuantity)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get product: %w", err)
+    }
+    
+    // Get total reserved quantity and prevent over booking
+    reservedQuantity, err := ir.GetProductReservations(ctx, productID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get product reservations: %w", err)
+    }
+    
+    availableQuantity := stockQuantity - reservedQuantity
+    
+    return &models.ProductInventory{
+        ProductID:           productID,
+        StockQuantity:       stockQuantity,
+        ReservedQuantity:    reservedQuantity,
+        AvailableQuantity:   availableQuantity,
+    }, nil
+}

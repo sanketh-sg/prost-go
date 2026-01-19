@@ -84,6 +84,14 @@ type ReleaseInventoryRequest struct {
     Reason        string `json:"reason"`
 }
 
+// ProductInventory represents product stock information
+type ProductInventory struct {
+    ProductID         int64 `json:"product_id"`
+    StockQuantity     int   `json:"stock_quantity"`      // Total stock
+    ReservedQuantity  int   `json:"reserved_quantity"`   // Quantity reserved for orders
+    AvailableQuantity int   `json:"available_quantity"`  // stock - reserved
+}
+
 // ErrorResponse standard error response
 type ErrorResponse struct {
     Error   string `json:"error"`

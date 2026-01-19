@@ -250,6 +250,11 @@ PostgreSQL Server
 │   │                   ----+---------+------------+----------+-------+------------+------------
 │   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
 │   │                           ----+----------+--------------+--------+--------+------------
+│   │   └── saga_states   id | correlation_id | saga_type | status | order_id | payload | compensation_log | created_at | updated_at | expires_at 
+│   │                    ----+----------------+-----------+--------+---------+---------+------------------+------------+------------+------------
+│   │   └── inventory_locks   id | cart_id | product_id | quantity | reservation_id | status | locked_at | expires_at | released_at 
+│   │                        ----+---------+------------+----------+----------------+--------+-----------+------------+-------------
+│   │ 
 │   └── Schema: orders
 │   │   ├── orders  id | user_id | cart_id | total | status | saga_correlation_id | created_at | updated_at | shipped_at | delivered_at | cancelled_at 
 │   │              ----+---------+---------+-------+--------+---------------------+------------+------------+------------+--------------+--------------

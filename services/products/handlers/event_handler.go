@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-    "strconv"
+	"strconv"
+	"time"
 
 	"github.com/sanketh-sg/prost/services/products/models"
 	"github.com/sanketh-sg/prost/services/products/repository"
 	"github.com/sanketh-sg/prost/shared/db"
 	"github.com/sanketh-sg/prost/shared/events"
-    "github.com/sanketh-sg/prost/shared/messaging"
+	"github.com/sanketh-sg/prost/shared/messaging"
 )
 
 // EventHandler handles incoming events for products service
@@ -52,21 +53,20 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, message []byte) error {
 	// Check idempotency - prevent processing same event twice
 	processed, err := eh.idempotencyStore.IsProcessed(ctx, eventID, "products")
 	if err != nil {
-		log.Printf("⚠️  Failed to check idempotency: %v", err)
+		log.Printf("Failed to check idempotency: %v", err)
 	}
 
 	if processed {
-		log.Printf("⏭️  Event %s already processed, skipping", eventID)
+		log.Printf("Event %s already processed, skipping", eventID)
 		return nil
 	}
-
 
     // Route to handler based on event type
     var handlerErr error
 
     switch eventType {
-    case "OrderPlaced":
-        handlerErr = eh.handleOrderPlaced(ctx, message)
+    case "OrderCreated":
+        handlerErr = eh.handleOrderCreated(ctx, message)
     case "OrderConfirmed":
         handlerErr = eh.handleOrderConfirmed(ctx, message)
     case "OrderFailed":
@@ -74,7 +74,7 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, message []byte) error {
     case "OrderCancelled":
         handlerErr = eh.handleOrderCancelled(ctx, message)
     default:
-        log.Printf("⏭️  Unknown event type: %s, skipping", eventType)
+        log.Printf("Unknown event type: %s, skipping", eventType)
         return nil
     }
 
@@ -85,7 +85,7 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, message []byte) error {
 	}
 
 	if recordErr := eh.idempotencyStore.RecordProcessed(ctx, eventID, "products", eventType, result); recordErr != nil {
-		log.Printf("⚠️  Failed to record idempotency: %v", recordErr)
+		log.Printf("Failed to record idempotency: %v", recordErr)
 	}
 
 	return handlerErr
@@ -94,14 +94,44 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, message []byte) error {
 // handleOrderPlaced handles OrderPlacedEvent
 // Why: When order is placed, we need to reserve the stock
 // This prevents double-selling when multiple orders try to buy same item
-func (eh *EventHandler) handleOrderPlaced(ctx context.Context, message []byte) error {
-    var event events.OrderPlacedEvent
+func (eh *EventHandler) handleOrderCreated(ctx context.Context, message []byte) error {
+    var event events.OrderCreatedEvent
     if err := json.Unmarshal(message, &event); err != nil {
-        return fmt.Errorf("failed to unmarshal OrderPlacedEvent: %w", err)
+        return fmt.Errorf("failed to unmarshal OrderCreatedEvent: %w", err)
     }
 
-    log.Printf("✓ Processing OrderPlacedEvent: OrderID=%d, Items=%d", event.OrderID, len(event.Items))
+    log.Printf("Processing OrderCreatedEvent: OrderID=%d, Items=%d", event.OrderID, len(event.Items))
 
+    insufficientInventory := false
+    // First: Check if all items have sufficient inventory
+    for _, item := range event.Items {
+        inventory, err := eh.inventoryRepo.GetProductInventory(ctx, item.ProductID)
+        if err != nil || inventory == nil || inventory.AvailableQuantity < item.Quantity {
+            log.Printf("Insufficient inventory for product %d: need %d, have %d", 
+                item.ProductID, item.Quantity, 
+                func() int { //anonymous function to get available quantity
+                    if inventory != nil {
+                        return inventory.AvailableQuantity
+                    }
+                    return 0
+                }())
+                insufficientInventory = true
+            break
+        }
+    }
+
+    if insufficientInventory{
+        // Publish OrderFailedEvent to trigger compensation
+            failedEvent := events.OrderFailedEvent{
+                BaseEvent: events.NewBaseEvent("OrderFailed", fmt.Sprintf("%d", event.OrderID), "order", event.CorrelationID),
+                OrderID:   fmt.Sprintf("%d", event.OrderID),
+                Reason:    "Insufficient inventory for product",
+            }
+            if err := eh.eventPublisher.PublishProductEvent(ctx, failedEvent); err != nil {
+                log.Printf("Failed to publish OrderFailedEvent: %v", err)
+            }
+            return fmt.Errorf("insufficient inventory for products")
+    } 
     // Reserve stock for each item in the order
     for _, item := range event.Items {
         reservation := &models.InventoryReservation{
@@ -110,14 +140,27 @@ func (eh *EventHandler) handleOrderPlaced(ctx context.Context, message []byte) e
             OrderID:       event.OrderID,
             ReservationID: fmt.Sprintf("res-%d-%d", event.OrderID, item.ProductID), // Generate unique ID
             Status:        "reserved",
+            CreatedAt: time.Now(),
+            ExpiresAt: time.Now().Add(5*time.Minute),
         }
 
         if err := eh.inventoryRepo.CreateReservation(ctx, reservation); err != nil {
-            log.Printf("❌ Failed to create reservation for product %d: %v", item.ProductID, err)
-            return fmt.Errorf("failed to create reservation: %w", err)
+            // Cleanup: Release already-reserved items
+            eh.releaseReservationsForOrder(ctx, event.OrderID)
+            
+            // Publish ONE OrderFailedEvent
+            failedEvent := events.OrderFailedEvent{
+                BaseEvent:    events.NewBaseEvent("OrderFailed", fmt.Sprintf("%d", event.OrderID), "order", event.CorrelationID),
+                OrderID:      fmt.Sprintf("%d", event.OrderID),
+                Reason:       fmt.Sprintf("failed to reserve inventory for product %d", item.ProductID),
+            }
+            if err := eh.eventPublisher.PublishProductEvent(ctx, failedEvent); err != nil {
+                log.Printf("Failed to publish OrderFailedEvent: %v", err)
+            }
+            return fmt.Errorf("failed to create reservation for product %d: %w", item.ProductID, err)
         }
 
-        log.Printf("✓ Reserved %d units of product %d for order %d", item.Quantity, item.ProductID, event.OrderID)
+        log.Printf("Reserved %d units of product %d for order %d", item.Quantity, item.ProductID, event.OrderID)
 
         // Publish StockReservedEvent for each item
         stockEvent := events.StockReservedEvent{
@@ -129,7 +172,7 @@ func (eh *EventHandler) handleOrderPlaced(ctx context.Context, message []byte) e
         }
 
         if err := eh.eventPublisher.PublishProductEvent(ctx, stockEvent); err != nil {
-            log.Printf("⚠️  Failed to publish StockReservedEvent: %v", err)
+            log.Printf("Failed to publish StockReservedEvent: %v", err)
             // Don't fail - idempotency will handle retry
         }
     }
@@ -151,7 +194,7 @@ func (eh *EventHandler) handleOrderConfirmed(ctx context.Context, message []byte
 
     // Update reservation status to "confirmed"
     if err := eh.inventoryRepo.UpdateReservationStatusByOrderID(ctx, fmt.Sprintf("%d", event.OrderID), "confirmed"); err != nil {
-        log.Printf("❌ Failed to update reservation status to confirmed: %v", err)
+        log.Printf("Failed to update reservation status to confirmed: %v", err)
         return fmt.Errorf("failed to update reservation status: %w", err)
     }
 
@@ -168,7 +211,7 @@ func (eh *EventHandler) handleOrderFailed(ctx context.Context, message []byte) e
         return fmt.Errorf("failed to unmarshal OrderFailedEvent: %w", err)
     }
 
-    log.Printf("✓ Processing OrderFailedEvent: OrderID=%s, Reason=%s", event.OrderID, event.Reason)
+    log.Printf("Processing OrderFailedEvent: OrderID=%s, Reason=%s", event.OrderID, event.Reason)
 
     // Get all reservations for this order
     orderID, err := strconv.ParseInt(event.OrderID, 10, 64)
@@ -178,14 +221,14 @@ func (eh *EventHandler) handleOrderFailed(ctx context.Context, message []byte) e
 
     reservations, err := eh.inventoryRepo.GetReservationsByOrderID(ctx, orderID)
     if err != nil {
-        log.Printf("❌ Failed to get reservations for order: %v", err)
+        log.Printf("Failed to get reservations for order: %v", err)
         return fmt.Errorf("failed to get reservations: %w", err)
     }
 
     // Release each reservation
     for _, res := range reservations {
         if err := eh.inventoryRepo.ReleaseReservation(ctx, res.ReservationID); err != nil {
-            log.Printf("❌ Failed to release reservation %s: %v", res.ReservationID, err)
+            log.Printf(" Failed to release reservation %s: %v", res.ReservationID, err)
             return fmt.Errorf("failed to release reservation: %w", err)
         }
 
@@ -199,10 +242,10 @@ func (eh *EventHandler) handleOrderFailed(ctx context.Context, message []byte) e
         }
 
         if err := eh.eventPublisher.PublishProductEvent(ctx, stockEvent); err != nil {
-            log.Printf("⚠️  Failed to publish StockReleasedEvent: %v", err)
+            log.Printf("Failed to publish StockReleasedEvent: %v", err)
         }
 
-        log.Printf("✓ Released %d units of product %d for failed order %s", res.Quantity, res.ProductID, event.OrderID)
+        log.Printf("Released %d units of product %d for failed order %s", res.Quantity, res.ProductID, event.OrderID)
     }
 
     return nil
@@ -217,7 +260,7 @@ func (eh *EventHandler) handleOrderCancelled(ctx context.Context, message []byte
         return fmt.Errorf("failed to unmarshal OrderCancelledEvent: %w", err)
     }
 
-    log.Printf("✓ Processing OrderCancelledEvent: OrderID=%s, Reason=%s", event.OrderID, event.Reason)
+    log.Printf("Processing OrderCancelledEvent: OrderID=%s, Reason=%s", event.OrderID, event.Reason)
 
     // Get all reservations for this order
     orderID, err := strconv.ParseInt(event.OrderID, 10, 64)
@@ -227,14 +270,14 @@ func (eh *EventHandler) handleOrderCancelled(ctx context.Context, message []byte
 
     reservations, err := eh.inventoryRepo.GetReservationsByOrderID(ctx, orderID)
     if err != nil {
-        log.Printf("❌ Failed to get reservations for order: %v", err)
+        log.Printf("Failed to get reservations for order: %v", err)
         return fmt.Errorf("failed to get reservations: %w", err)
     }
 
     // Release each reservation
     for _, res := range reservations {
         if err := eh.inventoryRepo.ReleaseReservation(ctx, res.ReservationID); err != nil {
-            log.Printf("❌ Failed to release reservation %s: %v", res.ReservationID, err)
+            log.Printf("Failed to release reservation %s: %v", res.ReservationID, err)
             return fmt.Errorf("failed to release reservation: %w", err)
         }
 
@@ -248,11 +291,27 @@ func (eh *EventHandler) handleOrderCancelled(ctx context.Context, message []byte
         }
 
         if err := eh.eventPublisher.PublishProductEvent(ctx, stockEvent); err != nil {
-            log.Printf("⚠️  Failed to publish StockReleasedEvent: %v", err)
+            log.Printf("Failed to publish StockReleasedEvent: %v", err)
         }
 
-        log.Printf("✓ Released %d units of product %d for cancelled order %s", res.Quantity, res.ProductID, event.OrderID)
+        log.Printf("Released %d units of product %d for cancelled order %s", res.Quantity, res.ProductID, event.OrderID)
     }
 
     return nil
+}
+
+// releaseReservationsForOrder releases all reservations for an order
+// Used when order fails after partial reservations
+func (eh *EventHandler) releaseReservationsForOrder(ctx context.Context, orderID int64) {
+    reservations, err := eh.inventoryRepo.GetReservationsByOrderID(ctx, orderID)
+    if err != nil {
+        log.Printf("Failed to get reservations for cleanup: %v", err)
+        return
+    }
+
+    for _, res := range reservations {
+        if err := eh.inventoryRepo.ReleaseReservation(ctx, res.ReservationID); err != nil {
+            log.Printf("Failed to release reservation %s during cleanup: %v", res.ReservationID, err)
+        }
+    }
 }

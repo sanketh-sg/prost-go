@@ -116,14 +116,13 @@ func main() {
     // Public routes
     router.GET("/health", cartHandler.Health)
     router.POST("/carts", cartHandler.CreateCart)
-    router.GET("/carts/:id", cartHandler.GetCart)
-    router.POST("/carts/:id/items", cartHandler.AddItem)
-    router.DELETE("/carts/:id/items/:product_id", cartHandler.RemoveItem)
-    router.PATCH("/carts/:id", cartHandler.UpdateCart)
-    router.DELETE("/carts/:id", cartHandler.DeleteCart)
+    router.GET("/carts", cartHandler.GetCart)
+    router.POST("/carts/items", cartHandler.AddItem)
+    router.DELETE("/carts/items/:product_id", cartHandler.RemoveItem)
+    router.DELETE("/carts", cartHandler.DeleteCart)
 
     // Checkout endpoint (initiates saga)
-    router.POST("/carts/:id/checkout", cartHandler.CheckoutCart)
+    router.POST("/carts/checkout", cartHandler.CheckoutCart)
 
     // Server setup
     srv := &http.Server{
@@ -139,7 +138,9 @@ func main() {
     go func() {
         eventHandler := subscribers.NewEventHandler(cartRepo, sagaRepo, inventoryLockRepo, idempotencyStore)
         if err := subscriber.Subscribe(func(message []byte) error {
-            return eventHandler.HandleEvent(context.Background(), message)
+            ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+            defer cancel()
+            return eventHandler.HandleEvent(ctx, message)
         }); err != nil {
             log.Printf("Subscriber error: %v", err)
         }

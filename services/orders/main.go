@@ -14,7 +14,7 @@ import (
 	"github.com/sanketh-sg/prost/services/orders/handlers"
 	"github.com/sanketh-sg/prost/services/orders/middleware"
 	"github.com/sanketh-sg/prost/services/orders/repository"
-	"github.com/sanketh-sg/prost/services/orders/subscribers"
+	"github.com/sanketh-sg/prost/services/orders/saga"
 	"github.com/sanketh-sg/prost/shared/db"
 	"github.com/sanketh-sg/prost/shared/messaging"
 )
@@ -105,7 +105,7 @@ func main() {
     subscriber := messaging.NewSubscriber(rmqConn, "orders.events.queue")
 
     // Initialize saga orchestrator
-    sagaOrchestrator := subscribers.NewSagaOrchestrator(
+    sagaOrchestrator := saga.NewSagaOrchestrator(
         orderRepo,
         sagaRepo,
         compensationRepo,
@@ -137,25 +137,28 @@ func main() {
     router.GET("/health", orderHandler.Health)
     router.GET("/orders/:id", orderHandler.GetOrder)
     router.GET("/orders", orderHandler.GetOrders)
+    router.POST("/orders/:id/cancel", orderHandler.CancelOrder)
 
     // Saga routes
     router.GET("/sagas/:correlation_id", orderHandler.GetSagaState)
-    router.POST("/orders/:id/cancel", orderHandler.CancelOrder)
 
     // Server setup
     srv := &http.Server{
         Addr:         ":" + port,
         Handler:      router,
         ReadTimeout:  15 * time.Second,
-        WriteTimeout: 15 * time.Second,
-        IdleTimeout:  60 * time.Second,
+        WriteTimeout: 30 * time.Second,
+        IdleTimeout:  120 * time.Second,
     }
 
     // Start event subscriber in background
     log.Println("\nStarting event subscriber...")
     go func() {
         if err := subscriber.Subscribe(func(message []byte) error {
-            return sagaOrchestrator.HandleEvent(context.Background(), message)
+            ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+            defer cancel()
+
+            return sagaOrchestrator.HandleEvent(ctx, message)
         }); err != nil {
             log.Printf("Subscriber error: %v", err)
         }

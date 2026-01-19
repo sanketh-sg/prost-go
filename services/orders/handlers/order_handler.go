@@ -7,13 +7,15 @@ import (
     "net/http"
     "strconv"
     "time"
+    "fmt"
 
     "github.com/gin-gonic/gin"
     "github.com/sanketh-sg/prost/services/orders/models"
     "github.com/sanketh-sg/prost/services/orders/repository"
-    "github.com/sanketh-sg/prost/services/orders/subscribers"
+    "github.com/sanketh-sg/prost/services/orders/saga"
     "github.com/sanketh-sg/prost/shared/db"
     "github.com/sanketh-sg/prost/shared/messaging"
+    "github.com/sanketh-sg/prost/shared/events"
 )
 
 // OrderHandler handles order-related HTTP requests
@@ -24,7 +26,7 @@ type OrderHandler struct {
     inventoryResRepo  *repository.InventoryReservationRepository
     idempotencyStore  *db.IdempotencyStore
     eventPublisher    *messaging.Publisher
-    sagaOrchestrator  *subscribers.SagaOrchestrator
+    sagaOrchestrator  *saga.SagaOrchestrator
 }
 
 // NewOrderHandler creates new order handler
@@ -35,7 +37,7 @@ func NewOrderHandler(
     inventoryResRepo *repository.InventoryReservationRepository,
     idempotencyStore *db.IdempotencyStore,
     eventPublisher *messaging.Publisher,
-    sagaOrchestrator *subscribers.SagaOrchestrator,
+    sagaOrchestrator *saga.SagaOrchestrator,
 ) *OrderHandler {
     return &OrderHandler{
         orderRepo:        orderRepo,
@@ -59,7 +61,9 @@ func (oh *OrderHandler) Health(c *gin.Context) {
 
 // GetOrder retrieves an order
 func (oh *OrderHandler) GetOrder(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background()
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+    defer cancel()
 
     orderIDStr := c.Param("id")
     orderID, err := strconv.ParseInt(orderIDStr, 10, 64)
@@ -87,7 +91,9 @@ func (oh *OrderHandler) GetOrder(c *gin.Context) {
 
 // GetOrders retrieves orders for a user
 func (oh *OrderHandler) GetOrders(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background()
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+    defer cancel()
 
     userID := c.Query("user_id")
     if userID == "" {
@@ -117,7 +123,9 @@ func (oh *OrderHandler) GetOrders(c *gin.Context) {
 
 // GetSagaState retrieves saga state
 func (oh *OrderHandler) GetSagaState(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background()
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+    defer cancel()
 
     correlationID := c.Param("correlation_id")
     if correlationID == "" {
@@ -144,7 +152,9 @@ func (oh *OrderHandler) GetSagaState(c *gin.Context) {
 
 // CancelOrder cancels an order
 func (oh *OrderHandler) CancelOrder(c *gin.Context) {
-    ctx := context.Background()
+    // ctx := context.Background()
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+    defer cancel()
 
     orderIDStr := c.Param("id")
     orderID, err := strconv.ParseInt(orderIDStr, 10, 64)
@@ -158,6 +168,7 @@ func (oh *OrderHandler) CancelOrder(c *gin.Context) {
     }
 
     var req models.CancelOrderRequest
+    //check if it is a valid cancel request
     if err := c.ShouldBindJSON(&req); err != nil {
         c.JSON(http.StatusBadRequest, models.ErrorResponse{
             Error:   "invalid request body",
@@ -196,6 +207,16 @@ func (oh *OrderHandler) CancelOrder(c *gin.Context) {
                 log.Printf("⚠️  Failed to release reservation: %v", err)
             }
         }
+    }
+
+    // Publish OrderCancelledEvent to trigger compensation (inventory release)
+    cancelledEvent := events.OrderCancelledEvent{
+        BaseEvent: events.NewBaseEvent("OrderCancelled", fmt.Sprintf("%d", orderID), "order", order.SagaCorrelationID),
+        OrderID:   fmt.Sprintf("%d", orderID),
+        Reason:    req.Reason, // provided by user
+    }
+    if err := oh.eventPublisher.PublishOrderEvent(ctx, cancelledEvent); err != nil {
+        log.Printf("Failed to publish OrderCancelledEvent: %v", err)
     }
 
     log.Printf("✓ Order cancelled: %d, Reason: %s", orderID, req.Reason)

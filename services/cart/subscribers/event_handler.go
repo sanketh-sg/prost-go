@@ -57,11 +57,11 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, message []byte) error {
     // Check idempotency - prevent processing same event twice
     processed, err := eh.idempotencyStore.IsProcessed(ctx, eventID, "cart")
     if err != nil {
-        log.Printf("⚠️  Failed to check idempotency: %v", err)
+        log.Printf("Failed to check idempotency: %v", err)
     }
 
     if processed {
-        log.Printf("⏭️  Event %s already processed, skipping", eventID)
+        log.Printf("Event %s already processed, skipping", eventID)
         return nil
     }
 
@@ -77,8 +77,10 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, message []byte) error {
         handlerErr = eh.handleOrderPlaced(ctx, message)
     case "OrderFailed":
         handlerErr = eh.handleOrderFailed(ctx, message)
+    case "OrderCancelled":
+        handlerErr = eh.handleOrderCancelled(ctx, message)
     default:
-        log.Printf("⏭️  Unknown event type: %s", eventType)
+        log.Printf("Unknown event type: %s", eventType)
         return nil
     }
 
@@ -89,7 +91,7 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, message []byte) error {
     }
 
     if recordErr := eh.idempotencyStore.RecordProcessed(ctx, eventID, "cart", eventType, result); recordErr != nil {
-        log.Printf("⚠️  Failed to record idempotency: %v", recordErr)
+        log.Printf("Failed to record idempotency: %v", recordErr)
     }
 
     return handlerErr
@@ -127,7 +129,7 @@ func (eh *EventHandler) handleStockReserved(ctx context.Context, message []byte)
 
         // Update saga state to reflect inventory locked
         if err := eh.sagaRepo.UpdateSagaStatus(ctx, event.CorrelationID, "inventory_locked"); err != nil {
-            log.Printf("⚠️  Failed to update saga status: %v", err)
+            log.Printf("Failed to update saga status: %v", err)
         }
     }
 
@@ -148,7 +150,7 @@ func (eh *EventHandler) handleStockReleased(ctx context.Context, message []byte)
 
     // Release (remove) the inventory lock
     if err := eh.inventoryLockRepo.ReleaseLock(ctx, event.ReservationID); err != nil {
-        log.Printf("❌ Failed to release inventory lock: %v", err)
+        log.Printf("Failed to release inventory lock: %v", err)
         return fmt.Errorf("failed to release inventory lock: %w", err)
     }
 
@@ -157,7 +159,7 @@ func (eh *EventHandler) handleStockReleased(ctx context.Context, message []byte)
     // If this is due to order failure, update saga status
     if event.Reason == "order_failed" || event.Reason == "order_cancelled" {
         if err := eh.sagaRepo.UpdateSagaStatus(ctx, event.CorrelationID, "failed"); err != nil {
-            log.Printf("⚠️  Failed to update saga status to failed: %v", err)
+            log.Printf("Failed to update saga status to failed: %v", err)
         }
     }
 
@@ -173,15 +175,24 @@ func (eh *EventHandler) handleOrderPlaced(ctx context.Context, message []byte) e
         return fmt.Errorf("failed to unmarshal OrderPlacedEvent: %w", err)
     }
 
-    log.Printf("📨 OrderPlacedEvent received: Order %d, User %s, Total %f",
+    log.Printf("OrderPlacedEvent received: Order %d, User %s, Total %f",
         event.OrderID, event.UserID, event.Total)
 
     // Update saga state to confirmed
     if err := eh.sagaRepo.UpdateSagaStatus(ctx, event.CorrelationID, "order_confirmed"); err != nil {
-        log.Printf("❌ Failed to update saga status: %v", err)
+        log.Printf("Failed to update saga status: %v", err)
         return fmt.Errorf("failed to update saga status: %w", err)
     }
 
+    cart, err := eh.cartRepo.GetCartByUserID(ctx, event.UserID)
+    if err == nil && cart != nil {
+        if err := eh.cartRepo.ClearCart(ctx, cart.ID); err != nil {
+            log.Printf("Failed to delete cart for user %s: %v", event.UserID, err)
+        } else {
+            log.Printf("Cart cleared for user: %s", event.UserID)
+        }
+    }
+    log.Printf("✓ Order placed and cart cleared for user: %s", event.UserID)
     log.Printf("✓ Saga marked as confirmed: %s", event.CorrelationID)
 
     return nil
@@ -196,7 +207,7 @@ func (eh *EventHandler) handleOrderFailed(ctx context.Context, message []byte) e
         return fmt.Errorf("failed to unmarshal OrderFailedEvent: %w", err)
     }
 
-    log.Printf("📨 OrderFailedEvent received: Order %s, Reason: %s", event.OrderID, event.Reason)
+    log.Printf("OrderFailedEvent received: Order %s, Reason: %s", event.OrderID, event.Reason)
 
     // Get the saga to find correlation ID
     orderID, err := strconv.ParseInt(event.OrderID, 10, 64)
@@ -215,6 +226,30 @@ func (eh *EventHandler) handleOrderFailed(ctx context.Context, message []byte) e
         // Note: Products service will handle releasing inventory via RabbitMQ
         // We just mark the saga state for our records
     }
+
+    return nil
+}
+
+func (eh *EventHandler) handleOrderCancelled(ctx context.Context, message []byte) error {
+    var event events.OrderCancelledEvent
+    if err := json.Unmarshal(message, &event); err != nil {
+        return fmt.Errorf("failed to unmarshal OrderCancelledEvent: %w", err)
+    }
+
+    log.Printf("OrderCancelledEvent received: Order %s, Reason: %s", event.OrderID, event.Reason)
+
+    // Update saga state to cancelled
+    if err := eh.sagaRepo.UpdateSagaStatus(ctx, event.CorrelationID, "cancelled"); err != nil {
+        log.Printf("Failed to update saga status to cancelled: %v", err)
+        return fmt.Errorf("failed to update saga status: %w", err)
+    }
+
+    log.Printf("Saga marked as cancelled: %s (Order %s, Reason: %s)", 
+        event.CorrelationID, event.OrderID, event.Reason)
+
+    // Note: Products service will release inventory locks via StockReleasedEvent
+    // We will handle cleanup when StockReleasedEvent arrives
+    // Cart items are kept in case user wants to retry with same items
 
     return nil
 }

@@ -100,6 +100,61 @@ func (cr *CartRepository) GetCart(ctx context.Context, cartID string) (*models.C
     return cart, nil
 }
 
+// GetCartByUserID retrieves user's active cart
+func (cr *CartRepository) GetCartByUserID(ctx context.Context, userID string) (*models.Cart, error) {
+    query := `
+        SELECT id, user_id, status, total, created_at, updated_at, abandoned_at
+        FROM $schema.carts
+        WHERE user_id = $1 AND status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 1
+    `
+
+    query = replaceSchema(query, cr.conn.Schema)
+
+    cart := &models.Cart{}
+    err := cr.conn.QueryRowContext(ctx, query, userID).Scan(
+        &cart.ID,
+        &cart.UserID,
+        &cart.Status,
+        &cart.Total,
+        &cart.CreatedAt,
+        &cart.UpdatedAt,
+        &cart.AbandonedAt,
+    )
+
+    if err != nil {
+        return nil, fmt.Errorf("failed to get cart by user id: %w", err)
+    }
+
+    // Get cart items
+    itemsQuery := `
+        SELECT id, cart_id, product_id, quantity, price, created_at, updated_at
+        FROM $schema.cart_items
+        WHERE cart_id = $1
+        ORDER BY created_at ASC
+    `
+
+    itemsQuery = replaceSchema(itemsQuery, cr.conn.Schema)
+
+    rows, err := cr.conn.QueryContext(ctx, itemsQuery, cart.ID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get cart items: %w", err)
+    }
+    defer rows.Close()
+
+    for rows.Next() {
+        item := &models.CartItem{}
+        err := rows.Scan(&item.ID, &item.CartID, &item.ProductID, &item.Quantity, &item.Price, &item.CreatedAt, &item.UpdatedAt)
+        if err != nil {
+            return nil, fmt.Errorf("failed to scan cart item: %w", err)
+        }
+        cart.Items = append(cart.Items, *item)
+    }
+
+    return cart, nil
+}
+
 // AddItem adds an item to cart
 func (cr *CartRepository) AddItem(ctx context.Context, item *models.CartItem) error {
     query := `
@@ -238,60 +293,6 @@ func (cr *CartRepository) ClearCart(ctx context.Context, cartID string) error {
     return nil
 }
 
-// GetCartByUserID retrieves user's active cart
-func (cr *CartRepository) GetCartByUserID(ctx context.Context, userID string) (*models.Cart, error) {
-    query := `
-        SELECT id, user_id, status, total, created_at, updated_at, abandoned_at
-        FROM $schema.carts
-        WHERE user_id = $1 AND status = 'active'
-        ORDER BY created_at DESC
-        LIMIT 1
-    `
-
-    query = replaceSchema(query, cr.conn.Schema)
-
-    cart := &models.Cart{}
-    err := cr.conn.QueryRowContext(ctx, query, userID).Scan(
-        &cart.ID,
-        &cart.UserID,
-        &cart.Status,
-        &cart.Total,
-        &cart.CreatedAt,
-        &cart.UpdatedAt,
-        &cart.AbandonedAt,
-    )
-
-    if err != nil {
-        return nil, fmt.Errorf("failed to get cart by user id: %w", err)
-    }
-
-    // Get cart items
-    itemsQuery := `
-        SELECT id, cart_id, product_id, quantity, price, created_at, updated_at
-        FROM $schema.cart_items
-        WHERE cart_id = $1
-        ORDER BY created_at ASC
-    `
-
-    itemsQuery = replaceSchema(itemsQuery, cr.conn.Schema)
-
-    rows, err := cr.conn.QueryContext(ctx, itemsQuery, cart.ID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to get cart items: %w", err)
-    }
-    defer rows.Close()
-
-    for rows.Next() {
-        item := &models.CartItem{}
-        err := rows.Scan(&item.ID, &item.CartID, &item.ProductID, &item.Quantity, &item.Price, &item.CreatedAt, &item.UpdatedAt)
-        if err != nil {
-            return nil, fmt.Errorf("failed to scan cart item: %w", err)
-        }
-        cart.Items = append(cart.Items, *item)
-    }
-
-    return cart, nil
-}
 
 // Helper function
 func replaceSchema(query, schema string) string {

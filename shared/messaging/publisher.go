@@ -80,6 +80,8 @@ func (p *Publisher) PublishOrderEvent(ctx context.Context, event interface{}) er
     var routingKey string
 
     switch event.(type) {
+	case events.OrderCreatedEvent:
+        routingKey = "order.created"
     case events.OrderPlacedEvent:
         routingKey = "order.placed"
     case events.OrderConfirmedEvent:
@@ -102,7 +104,7 @@ func (p *Publisher) PublishCartEvent(ctx context.Context, event interface{}) err
 
 	switch event.(type) {
 	case events.CartCheckoutInitiatedEvent:
-		routingKey = "cart.initiated"
+		routingKey = "cart.checkout.initiated"
 	case events.CartClearedEvent:
 		routingKey = "cart.cleared"
 	default:

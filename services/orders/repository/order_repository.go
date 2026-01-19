@@ -111,7 +111,7 @@ func (or *OrderRepository) GetOrder(ctx context.Context, orderID int64) (*models
         if err != nil {
             return nil, fmt.Errorf("failed to scan order item: %w", err)
         }
-        order.Items = append(order.Items, *item)
+        order.Items = append(order.Items, *item) //store the list of items in order
     }
 
     return order, nil

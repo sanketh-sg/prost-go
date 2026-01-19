@@ -167,7 +167,11 @@ func GetProstTopology() MessagingTopology {
 				ExchangeName: "cart.events.dlx",
 				RoutingKey:   "#",
 			},
-
+			{
+				QueueName:    "cart.events.queue",
+				ExchangeName: "orders.events",
+				RoutingKey:   "order.failed",
+			},
 			// Orders service bindings - listens to cart and order events
 			{
 				QueueName:    "orders.events.queue",

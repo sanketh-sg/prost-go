@@ -58,3 +58,15 @@ Cart Service (EventHandler)
 └─ RESPONDS to orchestrator's instructions
 
 The service that owns the primary resource (Orders owns orders) should orchestrate the saga involving that resource.
+
+│   ├── Schema: cart
+│   │   ├── carts   id | user_id | status | total | created_at | updated_at | abandoned_at 
+│   │              ----+---------+--------+-------+------------+------------+--------------
+│   │   └── cart_items   id | cart_id | product_id | quantity | price | created_at | updated_at 
+│   │                   ----+---------+------------+----------+-------+------------+------------
+│   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
+│   │                           ----+----------+--------------+--------+--------+------------
+│   │   └── saga_states   id | correlation_id | saga_type | status | order_id | payload | compensation_log | created_at | updated_at | expires_at 
+│   │                    ----+----------------+-----------+--------+---------+---------+------------------+------------+------------+------------
+│   │   └── inventory_locks   id | cart_id | product_id | quantity | reservation_id | status | locked_at | expires_at | released_at 
+│   │                        ----+---------+------------+----------+----------------+--------+-----------+------------+-------------
