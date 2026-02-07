@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sanketh-sg/prost/services/users/handlers"
 	"github.com/sanketh-sg/prost/services/users/middleware"
+    "github.com/sanketh-sg/prost/services/users/auth"
 	"github.com/sanketh-sg/prost/services/users/repository"
 	"github.com/sanketh-sg/prost/shared/db"
 )
@@ -54,6 +55,19 @@ func main() {
         jwtSecret = "default-secret-change-in-production"
     }
 
+    // Validate OAuth environment variables
+    auth0Domain := os.Getenv("AUTH0_DOMAIN")
+    auth0ClientID := os.Getenv("AUTH0_CLIENT_ID")
+    auth0ClientSecret := os.Getenv("AUTH0_CLIENT_SECRET")
+    auth0RedirectURI := os.Getenv("AUTH0_REDIRECT_URI")
+
+        if auth0Domain == "" || auth0ClientID == "" || auth0ClientSecret == "" || auth0RedirectURI == "" {
+        log.Println("WARNING: OAuth environment variables not fully configured")
+        log.Printf("   AUTH0_DOMAIN: %v", auth0Domain != "")
+        log.Printf("   AUTH0_CLIENT_ID: %v", auth0ClientID != "")
+        log.Printf("   AUTH0_CLIENT_SECRET: %v", auth0ClientSecret != "")
+        log.Printf("   AUTH0_REDIRECT_URI: %v", auth0RedirectURI != "")
+    }
 
 	// Set Gin mode
     gin.SetMode(gin.ReleaseMode)  // Disables debug logging, colorised output, better and faster
@@ -84,10 +98,15 @@ func main() {
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(dbConn)
+    oauthProviderRepo := repository.NewOAuthProviderRepository(dbConn)
 
+    // Initialize auth managers
+    jwtManager := auth.NewJWTManager(jwtSecret)
+    oauthManager := auth.NewOAuthManager()
 
-	//Initialize Handlers
-	userHandler := handlers.NewUserHandler(userRepo, jwtSecret)
+    //Initialize Handlers
+    userHandler := handlers.NewUserHandler(userRepo, jwtSecret)
+    oauthHandler := handlers.NewOAuthHandler(oauthManager, jwtManager, oauthProviderRepo, userRepo)
 
 	//Create Gin router
 	router := gin.New()
@@ -101,6 +120,12 @@ func main() {
     router.POST("/register", userHandler.Register)
     router.POST("/login", userHandler.Login)
     router.GET("/health", userHandler.Health)
+
+    // Public routes - OAuth (Auth0)
+    router.GET("/oauth/login", oauthHandler.InitiateOAuth)
+    router.GET("/oauth/login/gmail", oauthHandler.InitiateGmailOAuth)
+    router.GET("/oauth/callback", oauthHandler.OAuthCallback)
+    router.POST("/oauth/refresh", oauthHandler.RefreshToken)
 
 	// Protected routes (require JWT)
     protected := router.Group("/")

@@ -20,6 +20,12 @@ type Claims struct {
     jwt.RegisteredClaims  // It includes standard claims like ExpiresAt, IssuedAt, etc.
 }
 
+// RefreshClaims is used for refresh tokens (minimal claims)
+type RefreshClaims struct {
+    UserID string `json:"user_id"`
+    jwt.RegisteredClaims
+}
+
 // NewJWTManager creates a new JWT manager
 func NewJWTManager(secret string) *JWTManager {
     return &JWTManager{secret: secret}
@@ -49,6 +55,29 @@ func (jm *JWTManager) GenerateToken(userID, email, username string, expiresIn ti
     return tokenString, expiresAt, nil
 }
 
+// GenerateRefreshToken generates a refresh token (longer expiry, minimal claims)
+func (jm *JWTManager) GenerateRefreshToken(userID string, expiresIn time.Duration) (string, time.Time, error) {
+    expiresAt := time.Now().UTC().Add(expiresIn)
+
+    claims := RefreshClaims{
+        UserID: userID,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(expiresAt),
+            IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
+            NotBefore: jwt.NewNumericDate(time.Now().UTC()),
+            Issuer:    "prost-users-service",
+        },
+    }
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    tokenString, err := token.SignedString([]byte(jm.secret))
+    if err != nil {
+        return "", time.Time{}, fmt.Errorf("failed to sign refresh token: %w", err)
+    }
+
+    return tokenString, expiresAt, nil
+}
+
+
 // ValidateToken validates a JWT token and returns the claims
 func (jm *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
     claims := &Claims{}
@@ -66,6 +95,28 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 
     if !token.Valid {
         return nil, fmt.Errorf("invalid token")
+    }
+
+    return claims, nil
+}
+
+// ValidateRefreshToken validates a refresh token and returns the claims
+func (jm *JWTManager) ValidateRefreshToken(tokenString string) (*RefreshClaims, error) {
+    claims := &RefreshClaims{}
+
+    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+        }
+        return []byte(jm.secret), nil
+    })
+
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse refresh token: %w", err)
+    }
+
+    if !token.Valid {
+        return nil, fmt.Errorf("invalid refresh token")
     }
 
     return claims, nil

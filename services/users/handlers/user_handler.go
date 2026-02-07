@@ -167,6 +167,7 @@ func (uh *UserHandler) Login(c *gin.Context) {
     }
 
     // Get user by email
+    log.Printf("%+v",req)
     user, err := uh.userRepo.GetUserByEmail(ctx, req.Email)
     if err != nil {
         c.JSON(http.StatusUnauthorized, models.ErrorResponse{
@@ -186,9 +187,9 @@ func (uh *UserHandler) Login(c *gin.Context) {
         })
         return
     }
-
+    log.Println("Password verified")
     // Generate JWT token
-    token, expiresAt, err := uh.jwtManager.GenerateToken(user.ID, user.Email, user.Username, 24*time.Hour)
+    accessToken, _, err := uh.jwtManager.GenerateToken(user.ID, user.Email, user.Username, 24*time.Hour)
     if err != nil {
         c.JSON(http.StatusInternalServerError, models.ErrorResponse{
             Error:   "token generation failed",
@@ -198,10 +199,21 @@ func (uh *UserHandler) Login(c *gin.Context) {
         return
     }
 
+    
+    // Generate JWT refresh token
+    refreshToken, _, err := uh.jwtManager.GenerateRefreshToken(user.ID, 7*24*time.Hour)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+            Error:   "refresh token generation failed",
+            Message: err.Error(),
+            Code:    http.StatusInternalServerError,
+        })
+        return
+    }
+
     log.Printf("✓ User logged in: %s", user.Email)
 
     c.JSON(http.StatusOK, models.LoginResponse{
-        Token: token,
         User: models.User{
             ID:        user.ID,
             Email:     user.Email,
@@ -209,7 +221,10 @@ func (uh *UserHandler) Login(c *gin.Context) {
             CreatedAt: user.CreatedAt,
             UpdatedAt: user.UpdatedAt,
         },
-        ExpiresAt: expiresAt,
+        AccessToken:  accessToken,
+        RefreshToken: refreshToken,
+        ExpiresIn:    3600,
+        TokenType:    "Bearer",
     })
 }
 

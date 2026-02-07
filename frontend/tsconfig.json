@@ -1,4 +1,7 @@
 {
+  "compilerOptions": {
+    "module": "esnext"
+  },
   "files": [],
   "references": [
     {
@@ -6,9 +9,6 @@
     },
     {
       "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.vitest.json"
     }
   ]
 }

@@ -231,7 +231,7 @@ func TestLoginSuccess(t *testing.T) {
     assert.Equal(t, http.StatusOK, w.Code)
     var response models.LoginResponse
     json.Unmarshal(w.Body.Bytes(), &response)
-    assert.NotEmpty(t, response.Token)
+    assert.NotEmpty(t, response.AccessToken)
     assert.Equal(t, mockUser.Email, response.User.Email)
     assert.Equal(t, mockUser.ID, response.User.ID)
 }

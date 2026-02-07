@@ -243,6 +243,8 @@ PostgreSQL Server
 │   │             ----+-------+----------+---------------+------------+------------+------------
 │   │   └── idempotency_records  id | event_id | service_name | action | result | created_at 
 │   │                           ----+----------+--------------+--------+--------+------------
+│   │   └── oauth_providers  id | user_id | provider | provider_sub | provider_email | created_at | updated_at 
+│   │                       ----+---------+----------+--------------+----------------+------------+------------
 │   ├── Schema: cart
 │   │   ├── carts   id | user_id | status | total | created_at | updated_at | abandoned_at 
 │   │              ----+---------+--------+-------+------------+------------+--------------

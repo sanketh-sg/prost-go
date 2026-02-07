@@ -4,22 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	"github.com/sanketh-sg/prost/services/users/models"
-    "github.com/sanketh-sg/prost/shared/db"
+	"github.com/sanketh-sg/prost/shared/db"
+	"golang.org/x/crypto/bcrypt"
 )
-// UserRepositoryInterface defines the contract for user repository operations
-type UserRepositoryInterface interface {
-    CreateUser(ctx context.Context, user *models.User) error
-    GetUserByEmail(ctx context.Context, email string) (*models.User, error)
-    GetUserByID(ctx context.Context, userID string) (*models.User, error)
-    UpdateUser(ctx context.Context, user *models.User) error
-    DeleteUser(ctx context.Context, id string) error
-    EmailExists(ctx context.Context, email string) (bool, error)
-    UsernameExists(ctx context.Context, username string) (bool, error)
-}
 
 // UserRepository handles user database operations
 type UserRepository struct {
@@ -62,12 +53,13 @@ func (userRepo *UserRepository) CreateUser(ctx context.Context, user *models.Use
 // GetUserByEmail retrieves a user by email
 func (userRepo *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `
-	 	SELECT id, email, username, password_hash, created_at, updated_at, deleted_at
+	 	SELECT id, email, username, password_hash, created_at, updated_at
         FROM $schema.users
         WHERE email = $1 AND deleted_at IS NULL
 	`
 
 	query = replaceSchema(query, userRepo.dbConn.Schema)
+    log.Println(query)
 
 	user := &models.User{}
 	err := userRepo.dbConn.QueryRowContext(ctx, query, email).Scan(
@@ -77,13 +69,12 @@ func (userRepo *UserRepository) GetUserByEmail(ctx context.Context, email string
         &user.PasswordHash,
         &user.CreatedAt,
         &user.UpdatedAt,
-        &user.DeletedAt,
     )
 
     if err != nil {
         return nil, fmt.Errorf("failed to get user by email: %w", err)
     }
-
+    log.Println(user)
     return user, nil
 
 }
@@ -96,7 +87,7 @@ func (userRepo *UserRepository) GetUserByID(ctx context.Context, userId string)(
         WHERE id = $1 AND deleted_at IS NULL
 	`
 	query = replaceSchema(query,userRepo.dbConn.Schema)
-
+    log.Println(query)
 	user := &models.User{}
 	err := userRepo.dbConn.QueryRowContext(ctx,query,userId).Scan(
 		&user.ID,
@@ -203,12 +194,7 @@ func (userRepo *UserRepository) UsernameExists(ctx context.Context, username str
 }
 // Helper function to replace schema placeholder
 func replaceSchema(query, schema string) string {
-    for i := 0; i < len(query)-len("$schema"); i++ {
-        if query[i:i+len("$schema")] == "$schema" {
-            query = query[:i] + schema + query[i+len("$schema"):]
-        }
-    }
-    return query
+    return strings.ReplaceAll(query, "$schema", schema)
 }
 
 // HashPassword generates a bcrypt hash of the password
@@ -221,6 +207,7 @@ func HashPassword(password string)(string, error){
 }
 // VerifyPassword checks if the password matches the hash
 func VerifyPassword(hashedPassword, password string) bool {
+    
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword),[]byte(password))
 
 	return err == nil

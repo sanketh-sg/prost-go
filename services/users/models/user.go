@@ -15,6 +15,19 @@ type User struct {
     CreatedAt    time.Time `json:"created_at"`
     UpdatedAt    time.Time `json:"updated_at"`
     DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+    OAuthProviders []OAuthProvider `json:"oauth_providers,omitempty"`
+}
+
+// OAuthProvider represents an OAuth connection for a user
+type OAuthProvider struct {
+    ID            string    `json:"id"`
+    UserID        string    `json:"user_id"`
+    Provider      string    `json:"provider"` // 'auth0', 'google', 'github'
+    ProviderSub   string    `json:"-"`        // Never expose provider sub
+    ProviderEmail string    `json:"provider_email,omitempty"`
+    PictureURL    string    `json:"picture_url,omitempty"`
+    CreatedAt     time.Time `json:"created_at"`
+    UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // CreateUserRequest request body for user registration
@@ -32,11 +45,12 @@ type LoginRequest struct {
 
 // LoginResponse response containing JWT token
 type LoginResponse struct {
-    Token     string    `json:"token"`
-    User      User      `json:"user"`
-    ExpiresAt time.Time `json:"expires_at"`
+    User         User   `json:"user"`
+    AccessToken  string `json:"access_token"`
+    RefreshToken string `json:"refresh_token"`
+    ExpiresIn    int    `json:"expires_in"`
+    TokenType    string `json:"token_type"`
 }
-
 // UpdateProfileRequest request body for updating user profile
 type UpdateProfileRequest struct {
     Email    string `json:"email,omitempty"`
