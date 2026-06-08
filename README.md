@@ -1,214 +1,364 @@
-# Core Architecture
+# Prost-Go: Microservices E-Commerce Platform
 
-## Microservices:
-User Service: Authentication and user management (JWT-based)
-Products Service: Product catalog, categories, and inventory management
-Cart Service: Shopping cart operations and item management
-Orders Service: Order creation and saga-based distributed transactions
+A production-grade microservices e-commerce platform built with Go, Vue.js, and GraphQL. This project demonstrates modern distributed systems patterns including saga-based transactions, event-driven architecture, and database-per-service design.
 
-## Communication & Data:
-GraphQL Gateway: Aggregates all microservices into a single API endpoint
-RabbitMQ: Asynchronous event-driven communication between services (stock reserved, cart checkout initiated, orders confirmed)
-PostgreSQL: Database with 4 separate schemas (one per service) following database-per-service pattern
-Redis: Optional caching layer
+---
 
-## Key Architectural Patterns
-Saga Pattern: Distributed transactions across Cart → Orders → Products services with compensation logic for failures
-Event-Driven Architecture: Services communicate via RabbitMQ topic exchanges with routing keys (product.*, cart.*, order.*)
-Idempotency: Prevents duplicate event processing through idempotency keys and records
-Database-Per-Service: Each microservice owns its schema, ensuring loose coupling
+## 📊 Project Status
 
+**Current Phase:** Phase 1 - Foundation (In Progress)
 
-Plan: Step-by-Step Implementation Roadmap
-Current State: Gateway deleted, 4 empty service directories, infrastructure ready (PostgreSQL, Redis, RabbitMQ), frontend Vue scaffolded.
+| Phase | Title | Status | Timeline |
+|-------|-------|--------|----------|
+| 1 | Foundation (Shared packages, DB layer, Messaging setup) | 🔄 In Progress | Days 1-2 |
+| 2 | Database Schemas & RabbitMQ Topology | ⏳ Planned | Days 2-3 |
+| 3 | Users Service (Authentication & JWT) | ⏳ Planned | Days 3-4 |
+| 4 | Products Service (Catalog & Inventory) | ⏳ Planned | Days 4-6 |
+| 5 | Cart Service (Shopping cart with events) | ⏳ Planned | Days 6-8 |
+| 6 | Orders Service & Saga Pattern | ⏳ Planned | Days 8-11 |
+| 7 | GraphQL API Gateway | ⏳ Planned | Days 11-13 |
+| 8 | Frontend Integration | ⏳ Planned | Days 13-14 |
 
-Phase 1: Foundation (Days 1-2)
-1.1 Initialize Go modules & shared packages
+**Current State:**
+- ✅ Core architecture designed
+- ✅ Infrastructure ready (PostgreSQL, Redis, RabbitMQ in docker-compose)
+- ✅ Frontend scaffolded (Vue)
+- 🔄 Service directories created (empty)
+- 🔄 Implementing shared packages and database connectivity
 
-Create go.mod at root, shared/go.mod for shared code
-Implement models with DTOs (Product, Cart, Order, User, Event)
-Implement events with event type definitions (event_id, timestamp, version fields)
+---
 
-1.2 Setup database connectivity layer
-Create db with PostgreSQL connection manager (schema-aware)
-Add connection pooling, prepared statements, migration runner
-Support separate schemas: catalog, cart, orders, users
+## 🏗️ Architecture Overview
 
+### Microservices
 
-1.3 Setup RabbitMQ messaging layer
-Create messaging with publisher/subscriber patterns
-Implement DLQ (dead-letter queue) setup for each queue
-Add idempotency tracking via event_id
+| Service | Purpose | Port | Pattern |
+|---------|---------|------|---------|
+| **Users** | Authentication, user management (JWT-based) | 8083 | Synchronous REST |
+| **Products** | Product catalog, categories, inventory | 8081 | Async events |
+| **Cart** | Shopping cart operations, item management | 8082 | Async events + Saga |
+| **Orders** | Order creation, saga orchestration | 8084 | Saga Orchestrator |
+| **Gateway** | GraphQL API aggregation layer | 8080 | GraphQL |
 
+### Communication & Data Layer
 
-Phase 2: Database Schema (Days 2-3)
+```
+┌─────────────────────────────────────┐
+│      GraphQL Gateway (Port 8080)    │
+└────────┬────────────────────────────┘
+         │
+    ┌────┴────┬────────┬──────────┐
+    │          │        │          │
+  REST       REST      REST       REST
+    │          │        │          │
+┌──┴─┐  ┌────┴──┐  ┌──┴─┐  ┌────┴──┐
+│Users│  │Product│  │Cart│  │Orders │
+└──┬──┘  └───┬───┘  └──┬─┘  └───┬───┘
+   │         │         │        │
+   └─────────┴────┬────┴────────┘
+              ┌──┴────────────┐
+              │   RabbitMQ    │
+              │  Event Bus    │
+              └───────────────┘
+                     │
+        ┌────────────┴────────────┐
+        │                         │
+    ┌───┴─────────┬────────┬─────┴───┐
+    │             │        │         │
+PostgreSQL    Redis      Cache    Outbox
+(4 schemas)             (optional) Tables
+```
 
+### Key Technologies
 
-2.1 Create migration files
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Backend** | Go 1.21+ | Service implementations |
+| **API** | GraphQL (gqlgen) | Unified API layer |
+| **Message Queue** | RabbitMQ | Event-driven communication |
+| **Database** | PostgreSQL | Persistent data (4 schemas) |
+| **Cache** | Redis | Optional performance optimization |
+| **Frontend** | Vue 3 | Web UI |
 
-001_create_users_schema.sql — Users table, idempotency table
-002_create_catalog_schema.sql — Products, categories, inventory tracking
-003_create_cart_schema.sql — Cart items, saga state
-004_create_orders_schema.sql — Orders, order items, saga state
-2.2 Setup RabbitMQ topology
+---
 
-Create exchanges: products.events, orders.events, cart.events
-Create queues per service with DLQ bindings
-Document queue naming conventions
-2.3 Update docker-compose.yml
+## 🎯 Architecture Patterns
 
-Add users service (port 8083)
-Update DATABASE_URL per service with schema names
-Add init script to create RabbitMQ exchanges/queues on startup
-Phase 3: Users Service (Days 3-4)
-3.1 Scaffold users service
+### 1. **Saga Pattern** (Distributed Transactions)
+Manages multi-service transactions with compensation logic:
+- **Happy Path:** Cart → Reserve Stock → Create Order → Confirm
+- **Failure Path:** Automatic compensation (release stock, rollback)
+- **Implementation:** Orchestration via Orders service
 
-Create services/users/main.go, services/users/go.mod
-REST endpoints: POST /register, POST /login, GET /profile/:id
-JWT token generation & validation middleware
-3.2 Implement user database layer
+### 2. **Event-Driven Architecture**
+Asynchronous communication via RabbitMQ:
+- Topic exchanges: `products.*`, `cart.*`, `orders.*`
+- Routing keys for selective message delivery
+- Dead-Letter Queues (DLQ) for failed messages
+- Idempotency keys prevent duplicate processing
 
-User CRUD operations with password hashing (bcrypt)
-Idempotency tracking for duplicate requests
-3.3 Add to docker-compose
+### 3. **Database-Per-Service**
+Each microservice owns its database schema:
+- **users** schema: User accounts, authentication
+- **catalog** schema: Products, categories, inventory
+- **cart** schema: Cart items, saga state
+- **orders** schema: Orders, order items, saga state
+- Benefits: Loose coupling, independent scaling, schema evolution
 
-Build & test locally with docker-compose up users
-Phase 4: Products Service (Days 4-6)
-4.1 Scaffold products service
+### 4. **API Gateway Pattern**
+GraphQL Gateway aggregates all services:
+- Single entry point for clients
+- Service discovery abstraction
+- Authentication enforcement
+- Request routing and composition
 
-Create services/products/main.go, services/products/go.mod
-REST endpoints: POST /products, GET /products, GET /products/:id, PATCH /products/:id
-4.2 Implement product database layer
+### 5. **Outbox Pattern** (Dual Write Solution)
+Prevents message loss on database write + publish failures:
+- Write entity AND event to database (same transaction)
+- Polling service publishes events from outbox table
+- Retry mechanism ensures eventual consistency
+- Trade-off: ~6s latency (polling interval)
 
-Product CRUD, inventory management
-Idempotency tracking table
-4.3 Implement event publishing
+---
 
-Publish ProductCreated, ProductUpdated, StockReserved, StockReleased events
-Ensure event_id uniqueness for idempotency
-4.4 Test event flow
+## 🔧 Technology Stack
 
-Verify events published to RabbitMQ queue
-Check DLQ behavior with malformed messages
-Phase 5: Cart Service (Days 6-8)
-5.1 Scaffold cart service
+```
+Language Composition:
+- Go:         84.9%  (Core services)
+- Vue:        10.0%  (Frontend UI)
+- TypeScript:  3.9%  (Frontend typing)
+- Other:       1.2%  (Config, docs)
+```
 
-Create services/cart/main.go, services/cart/go.mod
-REST endpoints: POST /cart, POST /cart/items, GET /cart/:id, DELETE /cart/:id
-5.2 Implement cart database layer
+### Dependencies
+- **graphql-go** or **gqlgen** - GraphQL server
+- **amqp** - RabbitMQ client
+- **pgx** - PostgreSQL driver
+- **redis** - Redis client
+- **jwt-go** - JWT token handling
+- **bcrypt** - Password hashing
 
-Cart items, saga state tracking table
-Idempotency tracking
-5.3 Implement event consumers
+---
 
-Subscribe to StockReserved from products service
-Subscribe to StockReleased for compensation
-Update inventory locks in local DB
-5.4 Implement event publishers
+## 📋 Implementation Roadmap
 
-Publish ItemAddedToCart, CartCheckoutInitiated, CartCleared events
-5.5 Integration testing
+### Phase 1: Foundation (Days 1-2) - **CURRENT**
 
-Test product stock → cart item flow with events
-Phase 6: Orders Service & Saga Pattern (Days 8-11)
-6.1 Scaffold orders service
+**1.1 Go Modules & Shared Packages**
+- [ ] Initialize `go.mod` at root
+- [ ] Create `shared/go.mod` for shared code
+- [ ] Implement data models (Product, Cart, Order, User, Event)
+- [ ] Define event types with versioning
 
-Create services/orders/main.go, services/orders/go.mod
-REST endpoint: POST /orders (saga initiator)
-Saga state machine: PENDING → CART_VALIDATED → PAYMENT_PROCESSED → CONFIRMED (or FAILED → COMPENSATED)
-6.2 Implement order database layer
+**1.2 Database Connectivity Layer**
+- [ ] Create PostgreSQL connection manager
+- [ ] Implement connection pooling
+- [ ] Add migration runner
+- [ ] Support schema-aware operations
 
-Orders table, order items, saga state tracking
-Idempotency tracking with compensation log
-6.3 Implement saga orchestrator
+**1.3 RabbitMQ Messaging Layer**
+- [ ] Implement publisher/subscriber patterns
+- [ ] Setup Dead-Letter Queues (DLQ)
+- [ ] Add idempotency tracking via event_id
 
-Listen to CartCheckoutInitiated event
-Step 1: Validate cart & reserve inventory from products service
-Step 2: Create order, publish OrderPlaced event
-Step 3: Handle compensations (OrderCancelled → release inventory, OrderRollback)
-6.4 Implement event publishers & consumers
+---
 
-Publish: OrderPlaced, OrderConfirmed, OrderFailed, OrderCancelled
-Consume: CartCheckoutInitiated, PaymentProcessed (future payment service)
-6.5 Test saga flow
+### Phase 2: Database Schemas (Days 2-3)
 
-Happy path: cart → order created → inventory reserved
-Sad path: order fails → inventory released (compensation)
-DLQ handling: poison messages processed correctly
-Phase 7: API Gateway (Days 11-13)
-7.1 Scaffold GraphQL gateway
+**2.1 Migration Files**
+```
+001_create_users_schema.sql
+  - users table
+  - idempotency_records table
+  
+002_create_catalog_schema.sql
+  - products table
+  - categories table
+  - inventory_tracking table
+  
+003_create_cart_schema.sql
+  - cart_items table
+  - saga_state table
+  
+004_create_orders_schema.sql
+  - orders table
+  - order_items table
+  - saga_state table
+```
 
-Create gateway/go.mod, gateway/main.go
-Setup Apollo/GraphQL server in Go (gqlgen or graphql-go)
-7.2 Implement GraphQL schemas
+**2.2 RabbitMQ Topology**
+- [ ] Create topic exchanges (products.events, orders.events, cart.events)
+- [ ] Create queues per service with DLQ bindings
+- [ ] Document queue naming conventions
 
-Queries: products, product(id), cart(id), orders, order(id), user(id)
-Mutations: createProduct, addToCart, checkout (saga trigger), registerUser, loginUser
-7.3 Implement resolvers
+**2.3 Docker Compose Updates**
+- [ ] Add users service (port 8083)
+- [ ] Configure DATABASE_URL per service
+- [ ] Add RabbitMQ init script
 
-Route queries to respective microservices
-Users service: synchronous REST calls
-Products/Cart/Orders: HTTP to service APIs
-Handle async saga callbacks (WebSocket subscriptions for order status)
-7.4 Add authentication middleware
+---
 
-JWT validation from users service
-Authorization checks per resolver
-Phase 8: Frontend Integration (Days 13-14)
-8.1 Create API client
+### Phase 3: Users Service (Days 3-4)
+- [ ] REST endpoints: POST /register, POST /login, GET /profile/:id
+- [ ] JWT token generation & validation
+- [ ] Password hashing (bcrypt)
+- [ ] Docker integration
 
-Vue composables for GraphQL queries/mutations
-Handle authentication (login → store JWT)
-8.2 Implement UI pages
+### Phase 4: Products Service (Days 4-6)
+- [ ] REST endpoints: CRUD operations
+- [ ] Inventory management
+- [ ] Event publishing (ProductCreated, StockReserved, StockReleased)
+- [ ] Idempotency tracking
 
-Product list, product detail, cart, checkout, orders, user profile
-8.3 End-to-end testing
+### Phase 5: Cart Service (Days 6-8)
+- [ ] REST endpoints: Cart operations
+- [ ] Event consumers (StockReserved, StockReleased)
+- [ ] Saga state tracking
+- [ ] Integration testing
 
-Full user journey: register → browse products → add to cart → checkout → order confirmation
-Quick Reference: Which Service Handles What
+### Phase 6: Orders Service & Saga (Days 8-11)
+- [ ] Saga orchestrator
+- [ ] Event publishing/consuming
+- [ ] Compensation logic
+- [ ] End-to-end saga testing
 
-Component	            Service	        Pattern
-User authentication	    Users	        Synchronous REST + JWT
-Product catalog	        Products	    Async events (stock changes)
-Shopping cart	        Cart	        Async events + saga state
-Order creation	        Orders	        Saga orchestrator (choreography)
-Event publishing	    All services	RabbitMQ with DLQ
-API aggregation	        Gateway	        GraphQL + REST to services
+### Phase 7: GraphQL Gateway (Days 11-13)
+- [ ] GraphQL schema definition
+- [ ] Resolver implementation
+- [ ] Service routing
+- [ ] Authentication middleware
+- [ ] WebSocket subscriptions (order status updates)
 
-Start with: Phase 1 (shared packages) → Phase 2 (database schema) → Phase 3 (users service). All prerequisite for later phases.
+### Phase 8: Frontend Integration (Days 13-14)
+- [ ] API client (Vue composables)
+- [ ] UI pages (products, cart, checkout, orders, profile)
+- [ ] End-to-end user journey
+- [ ] Authentication flow
 
---------------------------------------------------
-### Dual write problem
-Happens when data needs to be written on 2 systems that are not connected.
+---
 
-The current implementation has a gap: if event publishing fails after DB write, there's no automatic retry mechanism. Event publishing has no automatic retry mechanism—if publishing fails after DB write, the event is lost (silently logged, never published to other services).
+## 🚀 Getting Started
 
-The correct solution is the Outbox Pattern: write the product to DB AND write the event to an outbox table in the same transaction. A background service polls the outbox every second, publishes unpublished events, and marks them as published. If publishing fails, it retries with exponential backoff, and after N retries, moves to a dead-letter queue. This guarantees:
+### Prerequisites
+- Go 1.21+
+- Docker & Docker Compose
+- Node.js 18+ (for frontend)
 
-Atomicity: Product and outbox entry both succeed or fail together
-Durability: Events are safely persisted before publishing
-Reliability: Background service ensures eventual delivery with retries
-Observability: We can track which events failed and why
+### Setup
 
-Event Sourcing + Outbox Pattern to deal with dual write problem.
+```bash
+# Clone repository
+git clone https://github.com/sanketh-sg/prost-go.git
+cd prost-go
 
-We handle the dual write problem using an event-first pattern: write to the database first, then publish events. This ensures if event publishing fails, the database change is persisted and can be retried. We prevent duplicate processing using idempotency keys—each event has a unique event_id that we check before processing. If the same event is retried due to network issues, we recognize it and skip it. For multi-step operations (sagas), we track the state machine in the database and use correlation IDs to link all related events together. If any step fails, we log compensation actions and can rollback in reverse order. This gives us exactly-once semantics on top of an at-least-once delivery model.
+# Start infrastructure (PostgreSQL, RabbitMQ, Redis)
+docker-compose up -d
 
-But, 
-The Outbox Pattern's main drawbacks are:
+# Initialize database
+# (Migrations runner to be implemented in Phase 2)
 
-Latency: Polling every N seconds means 6+ second delay before events are published. For real-time systems, this is unacceptable.
+# Run services (after Phase 1 implementation)
+go run ./services/users
+go run ./services/products
+go run ./services/cart
+go run ./services/orders
+go run ./gateway
 
-Operational Complexity: You need to manage outbox table cleanup (it grows unbounded), handle stuck/locked events, detect deadlocks, and deal with distributed locking across multiple instances.
+# Start frontend
+cd frontend
+npm install
+npm run dev
+```
 
-Race Conditions: Without careful locking, the same event can be published multiple times. You need pessimistic locking (locked_until columns) which adds more DB queries.
+### Testing GraphQL
+Visit Apollo Studio: https://studio.apollographql.com/dev
+- GraphQL URL: `http://localhost:8080/graphql`
+- Or use curl:
+```bash
+curl -X POST http://localhost:8080/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ products { id name } }"}'
+```
 
-smart retry approach: after writing to the database, spawn a goroutine that retries event publishing with exponential backoff (100ms, 200ms, 400ms...). RabbitMQ persistence ensures if our service crashes, the broker retains the message. Idempotency keys in receivers prevent duplicates anyway. This gives us reliability without the operational burden.
+---
 
-The 'Listen to Yourself' or CDC pattern is elegant: store events in the service's own database as part of the same transaction that creates the entity. This guarantees atomicity—both succeed or both fail. Then use a background listener to poll the event table and publish to RabbitMQ. The benefits are cleaner code (handler doesn't handle failures), automatic audit trail, and eventual consistency. The tradeoff is latency from polling.
+## 📚 Quick Reference: Service Responsibilities
 
-Option 1: use a exponential backoff stratagy which runs as a go routine after DB write publishing the event fixed number of times.
-Option 2: Write the products, events to an seperate outbox DB in a single transaction, which is polled by a service to emit the event.
-Option 3: Add a trigger to the product table to generate entry into events table, which is polled by a seperate service using  change data capture.
+| Component | Service | Pattern | Communication |
+|-----------|---------|---------|----------------|
+| User authentication | Users | Sync REST + JWT | HTTP |
+| Product catalog | Products | Async events | RabbitMQ |
+| Shopping cart | Cart | Async + Saga | RabbitMQ + HTTP |
+| Order creation | Orders | Saga orchestrator | RabbitMQ + HTTP |
+| Event publishing | All services | Async | RabbitMQ |
+| API aggregation | Gateway | GraphQL | GraphQL + HTTP |
 
-Downtream services must handle duplicates.
+---
+
+## ⚙️ Important Design Decisions
+
+### Dual Write Problem Solution
+**Challenge:** Writing to database AND publishing events atomically
+
+**Solutions Evaluated:**
+1. **Exponential Backoff (CURRENT)** ✅
+   - After DB write, spawn goroutine with retry logic
+   - RabbitMQ persistence ensures durability
+   - Pros: Simple, low latency (~100ms)
+   - Cons: Requires downstream idempotency
+
+2. **Outbox Pattern**
+   - Write entity and event to DB in same transaction
+   - Polling service publishes from outbox table
+   - Pros: Guaranteed atomicity
+   - Cons: Higher latency (~6s), operational complexity
+
+3. **Change Data Capture (CDC)**
+   - Database triggers generate events automatically
+   - Pros: Elegant, automatic
+   - Cons: Database-specific, complex setup
+
+**Downstream Requirement:** All services MUST handle duplicate events via idempotency keys
+
+---
+
+## 📖 Documentation Structure
+
+- `README.md` - This file (overview & roadmap)
+- `gateway/README.md` - GraphQL gateway implementation details
+- `frontend/README.md` - Vue frontend development guide
+- Service READMEs (to be created in Phases 3-6)
+
+---
+
+## 🤝 Contributing
+
+Phases are strictly sequential. Start with Phase 1 foundations before moving to later phases.
+
+Development order:
+1. Phase 1: Shared packages → DB layer → Messaging
+2. Phase 2: Database schemas → RabbitMQ topology
+3. Phase 3: Users service (simplest, no events)
+4. Phase 4: Products service (event publishing)
+5. Phase 5: Cart service (event consuming)
+6. Phase 6: Orders service (saga orchestration)
+7. Phase 7: Gateway (API aggregation)
+8. Phase 8: Frontend (UI integration)
+
+---
+
+## 📝 License
+
+MIT
+
+---
+
+## 🔗 Resources
+
+- [Saga Pattern](https://microservices.io/patterns/data/saga.html)
+- [Event Sourcing](https://martinfowler.com/eaaDev/EventSourcing.html)
+- [Database-per-Service](https://microservices.io/patterns/data/database-per-service.html)
+- [Outbox Pattern](https://microservices.io/patterns/data/transactional-outbox.html)
+- [RabbitMQ Best Practices](https://www.rabbitmq.com/best-practices.html)
+- [GraphQL Go](https://github.com/graphql-go/graphql)
